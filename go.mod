@@ -1,4 +1,4 @@
-module github.com/RedHatInsights/frontend-operator/cmd/valpop
+module github.com/RedHatInsights/valpop
 
 go 1.22.7
 

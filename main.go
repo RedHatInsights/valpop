@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -136,6 +137,15 @@ func populateFn(addr, source, prefix string, timeout int64) error {
 	return nil
 }
 
+func writeFile(root, key, contents string) {
+	elems := strings.Split(key, ":")
+	path := filepath.Join(root, elems[2])
+	dir, filename := filepath.Split(path)
+	fmt.Printf("%s - %s\n", dir, filename)
+	os.MkdirAll(dir, os.ModePerm)
+	os.WriteFile(path, []byte(contents), 0664)
+}
+
 func popFn(addr, dest string) error {
 	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{addr}})
 	if err != nil {
@@ -159,7 +169,12 @@ func popFn(addr, dest string) error {
 		}
 
 		for i := range scan.Elements {
-			fmt.Printf("%s\n", scan.Elements[i])
+			resp := client.Do(ctx, client.B().Get().Key(scan.Elements[i]).Build())
+			contents, err := resp.ToString()
+			if err != nil {
+				return err
+			}
+			writeFile(dest, scan.Elements[i], contents)
 		}
 		fmt.Printf("%d\n", scan.Cursor)
 
@@ -213,7 +228,7 @@ func main() {
 	populateCmd.MarkFlagRequired("source")
 	populateCmd.Flags().StringVarP(&prefix, "prefix", "r", "", "Prefix for dir structure and cache")
 	populateCmd.MarkFlagRequired("prefix")
-	populateCmd.Flags().Int64VarP(&timeout, "timeout", "t", 5, "Timeout for cache")
+	populateCmd.Flags().Int64VarP(&timeout, "timeout", "t", 10, "Timeout for cache")
 	populateCmd.MarkFlagRequired("source")
 	populateCmd.MarkFlagRequired("prefix")
 	viper.BindPFlag("source", populateCmd.Flags().Lookup("source"))

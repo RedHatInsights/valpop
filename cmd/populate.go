@@ -13,29 +13,35 @@ import (
 )
 
 // Populate CMD
-var source string
-var prefix string
-var timeout int64
 var populateCmd = &cobra.Command{
 	Use:   "populate",
 	Short: "populates the cache",
 	Long:  "populates the cache from the source",
-	Run: func(cmd *cobra.Command, args []string) {
-		populateFn(addr, source, prefix, timeout)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if viper.GetString("source") == "" {
+			return fmt.Errorf("no source arg set")
+		}
+		if viper.GetString("prefix") == "" {
+			return fmt.Errorf("no prefix arg set")
+		}
+
+		return populateFn(
+			addr,
+			viper.GetString("source"),
+			viper.GetString("prefix"),
+			viper.GetInt64("timeout"),
+		)
 	},
 }
 
 func init() {
-	populateCmd.Flags().StringVarP(&source, "source", "s", "", "Source directory")
-	populateCmd.MarkFlagRequired("source")
-	populateCmd.Flags().StringVarP(&prefix, "prefix", "r", "", "Prefix for dir structure and cache")
-	populateCmd.MarkFlagRequired("prefix")
-	populateCmd.Flags().Int64VarP(&timeout, "timeout", "t", 10, "Timeout for cache")
-	populateCmd.MarkFlagRequired("source")
-	populateCmd.MarkFlagRequired("prefix")
+	populateCmd.Flags().StringP("source", "s", "", "Source directory")
+	populateCmd.Flags().StringP("prefix", "r", "", "Prefix for dir structure and cache")
+	populateCmd.Flags().Int64P("timeout", "t", 10, "Timeout for cache")
 	viper.BindPFlag("source", populateCmd.Flags().Lookup("source"))
 	viper.BindPFlag("prefix", populateCmd.Flags().Lookup("prefix"))
 	viper.BindPFlag("timeout", populateCmd.Flags().Lookup("timeout"))
+	rootCmd.AddCommand(populateCmd)
 }
 
 func populateFn(addr, source, prefix string, timeout int64) error {

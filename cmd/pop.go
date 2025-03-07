@@ -18,15 +18,18 @@ var popCmd = &cobra.Command{
 	Use:   "pop",
 	Short: "copies to the dest for serving",
 	Long:  "copies cache to dest for serving",
-	Run: func(cmd *cobra.Command, args []string) {
-		popFn(addr, dest)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if viper.GetString("dest") == "" {
+			return fmt.Errorf("dest arg not set")
+		}
+		return popFn(addr, dest)
 	},
 }
 
 func init() {
 	popCmd.Flags().StringVarP(&dest, "dest", "d", "", "Dest directory")
-	popCmd.MarkFlagRequired("dest")
 	viper.BindPFlag("dest", popCmd.Flags().Lookup("dest"))
+	rootCmd.AddCommand(popCmd)
 }
 
 func popFn(addr, dest string) error {

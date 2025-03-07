@@ -23,7 +23,7 @@ func init() {
 	viper.AutomaticEnv()
 
 	rootCmd.PersistentFlags().StringP("hostname", "a", "127.0.0.1", "Valkey hostname")
-	rootCmd.PersistentFlags().StringP("port", "p", "", "Valkey port")
+	rootCmd.PersistentFlags().StringP("port", "p", "6379", "Valkey port")
 	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 }

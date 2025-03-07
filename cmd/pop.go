@@ -80,3 +80,6 @@ func writeFile(root, key, contents string) {
 	os.MkdirAll(dir, os.ModePerm)
 	os.WriteFile(path, []byte(contents), 0664)
 }
+
+// TODO Define a cacher function to return all files in the standard struct
+// TODO Stop passing prefix and other items to the cacher object

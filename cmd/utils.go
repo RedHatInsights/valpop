@@ -16,12 +16,11 @@ import (
 type Cacher struct {
 	client    valkey.Client
 	ctx       context.Context
-	prefix    string
 	cacheTime time.Time
 	timeout   int64
 }
 
-func (c *Cacher) dumpFile(path string, d fs.DirEntry, err error) error {
+func (c *Cacher) dumpFile(prefix, path string, d fs.DirEntry, err error) error {
 	if err != nil {
 		fmt.Printf("WE GOT AN ERR %v", err)
 	}
@@ -35,7 +34,7 @@ func (c *Cacher) dumpFile(path string, d fs.DirEntry, err error) error {
 		return err
 	}
 
-	key := fmt.Sprintf("%s:%d:%s", c.prefix, c.cacheTime.Unix(), path)
+	key := fmt.Sprintf("%s:%d:%s", prefix, c.cacheTime.Unix(), path)
 
 	fmt.Printf("%s: %s (%d)\n", path, key, len(contents))
 
@@ -47,12 +46,12 @@ func (c *Cacher) dumpFile(path string, d fs.DirEntry, err error) error {
 	return nil
 }
 
-func (c *Cacher) cleanupCache() error {
+func (c *Cacher) cleanupCache(prefix string) error {
 	// Soemthign like  filename[4,5,6,7]
 	cacheList := make(map[string][]int64)
 	cursor := uint64(0)
 	for {
-		resp := c.client.Do(c.ctx, c.client.B().Scan().Cursor(cursor).Match(c.prefix+"*").Build())
+		resp := c.client.Do(c.ctx, c.client.B().Scan().Cursor(cursor).Match(prefix+"*").Build())
 		if resp.Error() != nil {
 			return fmt.Errorf("err from valkey:%w", resp.Error())
 		}
@@ -76,11 +75,11 @@ func (c *Cacher) cleanupCache() error {
 		}
 		cursor = scan.Cursor
 	}
-	c.processCacheList(cacheList)
+	c.processCacheList(cacheList, prefix)
 	return nil
 }
 
-func (c *Cacher) processCacheList(cacheList map[string][]int64) error {
+func (c *Cacher) processCacheList(cacheList map[string][]int64, prefix string) error {
 	keys := []string{}
 	for filename, stamps := range cacheList {
 		sort.Slice(stamps, func(i, j int) bool {
@@ -89,7 +88,7 @@ func (c *Cacher) processCacheList(cacheList map[string][]int64) error {
 		for z := range stamps[1:] {
 			if stamps[z] < time.Now().Unix()-c.timeout {
 				fmt.Printf("del: %s:%d\n", filename, stamps[z])
-				keys = append(keys, fmt.Sprintf("%s:%d:%s", c.prefix, stamps[z], filename))
+				keys = append(keys, fmt.Sprintf("%s:%d:%s", prefix, stamps[z], filename))
 			}
 		}
 	}
@@ -101,11 +100,10 @@ func (c *Cacher) processCacheList(cacheList map[string][]int64) error {
 	return nil
 }
 
-func NewCacher(ctx context.Context, client valkey.Client, prefix string, cacheTime time.Time, timeout int64) Cacher {
+func NewCacher(ctx context.Context, client valkey.Client, cacheTime time.Time, timeout int64) Cacher {
 	return Cacher{
 		client:    client,
 		ctx:       ctx,
-		prefix:    prefix,
 		cacheTime: cacheTime,
 		timeout:   timeout,
 	}

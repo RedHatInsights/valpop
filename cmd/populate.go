@@ -56,13 +56,15 @@ func populateFn(addr, source, prefix string, timeout int64) error {
 	ctx := context.Background()
 
 	fileSystem := os.DirFS(source)
-	cacher := NewCacher(ctx, client, prefix, currentTime, timeout)
-	err = fs.WalkDir(fileSystem, ".", cacher.dumpFile)
+	cacher := NewCacher(ctx, client, currentTime, timeout)
+	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		return cacher.dumpFile(prefix, path, d, err)
+	})
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
 
-	cacher.cleanupCache()
+	cacher.cleanupCache(prefix)
 
 	return nil
 }

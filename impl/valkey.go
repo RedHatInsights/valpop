@@ -25,16 +25,40 @@ func NewValkey(addr string) (Valkey, error) {
 	}, nil
 }
 
-func makeKey(namespace, filepath string, timestamp int64) string {
-	return fmt.Sprintf("%s:%d:%s", namespace, timestamp, filepath)
+func makeDataKey(namespace, filepath string, timestamp int64) string {
+	return fmt.Sprintf("data:%s:%d:%s", namespace, timestamp, filepath)
+}
+
+func makeLockKey(namespace string, timestamp int64) string {
+	return fmt.Sprintf("lock:%s:%d", namespace, timestamp)
 }
 
 func (v *Valkey) Close() {
 	v.client.Close()
 }
 
+func (v *Valkey) StartPopulate(namespace string, timestamp int64) error {
+	lockKey := makeLockKey(namespace, timestamp)
+	err := v.client.Do(v.ctx, v.client.B().Set().Key(lockKey).Value("in-progress").Build()).Error()
+	if err != nil {
+		return fmt.Errorf("err from valkey:%w", err)
+	}
+	fmt.Printf("%s:%d (in-progress)\n", namespace, timestamp)
+	return nil
+}
+
+func (v *Valkey) EndPopulate(namespace string, timestamp int64) error {
+	lockKey := makeLockKey(namespace, timestamp)
+	err := v.client.Do(v.ctx, v.client.B().Del().Key(lockKey).Build()).Error()
+	if err != nil {
+		return fmt.Errorf("err from valkey:%w", err)
+	}
+	fmt.Printf("%s:%d (removed)\n", namespace, timestamp)
+	return nil
+}
+
 func (v *Valkey) SetItem(namespace, filepath string, timestamp int64, contents string) error {
-	key := makeKey(namespace, filepath, timestamp)
+	key := makeDataKey(namespace, filepath, timestamp)
 
 	fmt.Printf("%s: %s (%d)\n", filepath, key, len(contents))
 
@@ -49,7 +73,7 @@ func (v *Valkey) GetKeys(namespace string) (AllItems, error) {
 	cacheList := AllItems{namespace: Items{}}
 	cursor := uint64(0)
 	for {
-		resp := v.client.Do(v.ctx, v.client.B().Scan().Cursor(cursor).Match(namespace+"*").Build())
+		resp := v.client.Do(v.ctx, v.client.B().Scan().Cursor(cursor).Match("data:"+namespace+":*").Build())
 		if resp.Error() != nil {
 			return make(AllItems), fmt.Errorf("err from valkey:%w", resp.Error())
 		}
@@ -60,11 +84,21 @@ func (v *Valkey) GetKeys(namespace string) (AllItems, error) {
 		}
 
 		for i := range scan.Elements {
-			elems := strings.Split(scan.Elements[i], ":")
+			elems := strings.Split(scan.Elements[i], ":")[1:]
 			timeStamp, err := strconv.Atoi(elems[1])
 			if err != nil {
 				return make(AllItems), err
 			}
+
+			lockKey := makeLockKey(namespace, int64(timeStamp))
+			inProgress, err := v.isInProgress(lockKey)
+			if inProgress {
+				continue
+			}
+			if err != nil {
+				return make(AllItems), err
+			}
+
 			cacheList[namespace][elems[2]] = append(cacheList[namespace][elems[2]], int64(timeStamp))
 		}
 
@@ -76,8 +110,20 @@ func (v *Valkey) GetKeys(namespace string) (AllItems, error) {
 	return cacheList, nil
 }
 
+func (v *Valkey) isInProgress(lockKey string) (bool, error) {
+	resp := v.client.Do(v.ctx, v.client.B().Get().Key(lockKey).Build())
+	if resp.Error() != nil {
+		return false, nil
+	}
+	data, err := resp.ToString()
+	if err != nil {
+		return false, err
+	}
+	return data == "in-progress", nil
+}
+
 func (v *Valkey) GetItem(namespace, filepath string, timestamp int64) (string, error) {
-	key := makeKey(namespace, filepath, timestamp)
+	key := makeDataKey(namespace, filepath, timestamp)
 	resp := v.client.Do(v.ctx, v.client.B().Get().Key(key).Build())
 	if resp.Error() != nil {
 		return "", nil
@@ -90,11 +136,12 @@ func (v *Valkey) GetItem(namespace, filepath string, timestamp int64) (string, e
 }
 
 func (v *Valkey) DelKeys(allitems AllItems) error {
+	fmt.Printf("Deleting %d keys", len(AllItems{}))
 	keys := []string{}
 	for namespace, items := range allitems {
 		for filepath, timestamps := range items {
 			for _, timestamp := range timestamps {
-				keys = append(keys, makeKey(namespace, filepath, timestamp))
+				keys = append(keys, makeDataKey(namespace, filepath, timestamp))
 			}
 		}
 	}

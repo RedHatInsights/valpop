@@ -46,7 +46,7 @@ func init() {
 }
 
 func populateFn(addr, source, prefix string, timeout int64) error {
-	currentTime := time.Now()
+	currentTime := time.Now().Unix()
 
 	client, err := impl.NewValkey(addr)
 	if err != nil {
@@ -56,15 +56,15 @@ func populateFn(addr, source, prefix string, timeout int64) error {
 	defer client.Close()
 
 	fileSystem := os.DirFS(source)
+	client.StartPopulate(prefix, currentTime)
 	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		return dumpFile(&client, prefix, path, d, fmt.Sprintf("%d", currentTime.Unix()), err)
+		return dumpFile(&client, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
-
+	client.EndPopulate(prefix, currentTime)
 	cleanupCache(&client, prefix, timeout)
-
 	return nil
 }
 

@@ -1,11 +1,17 @@
-package impl
+package valkey
 
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
+	fp "path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/RedHatInsights/valpop/impl"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -69,25 +75,25 @@ func (v *Valkey) SetItem(namespace, filepath string, timestamp int64, contents s
 	return nil
 }
 
-func (v *Valkey) GetKeys(namespace string) (AllItems, error) {
-	cacheList := AllItems{namespace: Items{}}
+func (v *Valkey) GetKeys(namespace string) (impl.AllItems, error) {
+	cacheList := impl.AllItems{namespace: impl.Items{}}
 	cursor := uint64(0)
 	for {
 		resp := v.client.Do(v.ctx, v.client.B().Scan().Cursor(cursor).Match("data:"+namespace+":*").Build())
 		if resp.Error() != nil {
-			return make(AllItems), fmt.Errorf("err from valkey:%w", resp.Error())
+			return make(impl.AllItems), fmt.Errorf("err from valkey:%w", resp.Error())
 		}
 
 		scan, err := resp.AsScanEntry()
 		if err != nil {
-			return make(AllItems), fmt.Errorf("scan decode error:%w", err)
+			return make(impl.AllItems), fmt.Errorf("scan decode error:%w", err)
 		}
 
 		for i := range scan.Elements {
 			elems := strings.Split(scan.Elements[i], ":")[1:]
 			timeStamp, err := strconv.Atoi(elems[1])
 			if err != nil {
-				return make(AllItems), err
+				return make(impl.AllItems), err
 			}
 
 			lockKey := makeLockKey(namespace, int64(timeStamp))
@@ -96,7 +102,7 @@ func (v *Valkey) GetKeys(namespace string) (AllItems, error) {
 				continue
 			}
 			if err != nil {
-				return make(AllItems), err
+				return make(impl.AllItems), err
 			}
 
 			cacheList[namespace][elems[2]] = append(cacheList[namespace][elems[2]], int64(timeStamp))
@@ -135,8 +141,8 @@ func (v *Valkey) GetItem(namespace, filepath string, timestamp int64) (string, e
 	return contents, nil
 }
 
-func (v *Valkey) DelKeys(allitems AllItems) error {
-	fmt.Printf("Deleting %d keys", len(AllItems{}))
+func (v *Valkey) DelKeys(allitems impl.AllItems) error {
+	fmt.Printf("Deleting %d keys", len(impl.AllItems{}))
 	keys := []string{}
 	for namespace, items := range allitems {
 		for filepath, timestamps := range items {
@@ -147,4 +153,118 @@ func (v *Valkey) DelKeys(allitems AllItems) error {
 	}
 
 	return v.client.Do(v.ctx, v.client.B().Del().Key(keys...).Build()).Error()
+}
+
+func PopFn(addr, dest string) error {
+	fmt.Println("Invoking pop...")
+	client, err := NewValkey(addr)
+	if err != nil {
+		return err
+	}
+
+	defer client.Close()
+
+	allKeys, err := client.GetKeys("")
+	if err != nil {
+		return err
+	}
+
+	for prefix, fileitems := range allKeys {
+		for filepath, stamps := range fileitems {
+			slices.Sort(stamps)
+			contents, err := client.GetItem(prefix, filepath, stamps[0])
+			if err != nil {
+				return err
+			}
+			writeFile(dest, filepath, contents)
+		}
+	}
+	return nil
+}
+
+func writeFile(root, filepath, contents string) {
+	path := fp.Join(root, filepath)
+	dir, filename := fp.Split(path)
+	fmt.Printf("%s - %s\n", dir, filename)
+	os.MkdirAll(dir, os.ModePerm)
+	os.WriteFile(path, []byte(contents), 0664)
+}
+
+func PopulateFn(addr, source, prefix string, timeout int64) error {
+	currentTime := time.Now().Unix()
+
+	client, err := NewValkey(addr)
+	if err != nil {
+		return err
+	}
+
+	defer client.Close()
+
+	fileSystem := os.DirFS(source)
+	client.StartPopulate(prefix, currentTime)
+	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		return dumpFile(&client, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
+	})
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+	client.EndPopulate(prefix, currentTime)
+	cleanupCache(&client, prefix, timeout)
+	return nil
+}
+
+func dumpFile(client impl.CacheInterface, prefix, path string, d fs.DirEntry, timestamp string, err error) error {
+	if err != nil {
+		fmt.Printf("WE GOT AN ERR %v", err)
+	}
+
+	if d.IsDir() {
+		return nil
+	}
+
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("%s:%s:%s", prefix, timestamp, path)
+
+	fmt.Printf("%s: %s (%d)\n", path, key, len(contents))
+
+	timestampAsInt, err := strconv.Atoi(timestamp)
+	if err != nil {
+		return err
+	}
+	err = client.SetItem(prefix, path, int64(timestampAsInt), string(contents))
+	if err != nil {
+		return fmt.Errorf("err from valkey:%w", err)
+	}
+
+	return nil
+}
+
+func cleanupCache(client impl.CacheInterface, prefix string, timeout int64) error {
+	// Soemthign like  filename[4,5,6,7]
+	cacheList, err := client.GetKeys(prefix)
+	if err != nil {
+		return err
+	}
+	deleteItems := make(impl.AllItems)
+	deleteItems[prefix] = make(impl.Items)
+	for filename, stamps := range cacheList[prefix] {
+
+		slices.Sort(stamps)
+		for z := range stamps[1:] {
+			if stamps[z] < time.Now().Unix()-timeout {
+				fmt.Printf("del: %s:%d\n", filename, stamps[z])
+				deleteItems[prefix][filename] = append(deleteItems[prefix][filename], stamps[z])
+			}
+		}
+	}
+	fmt.Printf("%v", deleteItems)
+	err = client.DelKeys(deleteItems)
+	if err != nil {
+		return fmt.Errorf("err from valkey:%w", err)
+	}
+	return nil
 }

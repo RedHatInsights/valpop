@@ -83,19 +83,13 @@ func (m *Minio) SetManifest(namespace string, timestamp int64, files Manifest) e
 
 type Manifest []string
 
-func PopulateFn(addr, source, prefix, username, password string, timeout int64) error {
+func (m *Minio) PopulateFn(addr, source, prefix string, timeout int64) error {
 	currentTime := time.Now().Unix()
 
-	client, err := NewMinio(addr, username, password)
-	if err != nil {
-		return err
-	}
-
-	defer client.Close()
 	fileSystem := os.DirFS(source)
-	client.StartPopulate(prefix, currentTime)
+	m.StartPopulate(prefix, currentTime)
 	manifest := Manifest{}
-	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
 			return nil
 		}
@@ -105,23 +99,23 @@ func PopulateFn(addr, source, prefix, username, password string, timeout int64) 
 			return werr
 		}
 		manifest = append(manifest, path)
-		return client.SetItem(prefix, path, currentTime, string(contents))
+		return m.SetItem(prefix, path, currentTime, string(contents))
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
 
-	err = client.SetManifest(prefix, currentTime, manifest)
+	err = m.SetManifest(prefix, currentTime, manifest)
 	if err != nil {
 		return err
 	}
 
-	err = client.EndPopulate(prefix, currentTime)
+	err = m.EndPopulate(prefix, currentTime)
 	if err != nil {
 		return err
 	}
 
-	return client.CleanupCache(prefix, timeout)
+	return m.CleanupCache(prefix, timeout)
 }
 
 func (m *Minio) CleanupCache(prefix string, timeout int64) error {

@@ -23,19 +23,30 @@ var populateCmd = &cobra.Command{
 		}
 
 		if viper.GetString("mode") == "valkey" {
-			return valkey.PopulateFn(
+			client, err := valkey.NewValkey(addr)
+			if err != nil {
+				return err
+			}
+
+			defer client.Close()
+
+			return client.PopulateFn(
 				addr,
 				viper.GetString("source"),
 				viper.GetString("prefix"),
 				viper.GetInt64("timeout"),
 			)
 		} else if viper.GetString("mode") == "s3" {
-			return s3.PopulateFn(
+			client, err := s3.NewMinio(addr, viper.GetString("username"), viper.GetString("password"))
+			if err != nil {
+				return err
+			}
+
+			defer client.Close()
+			return client.PopulateFn(
 				addr,
 				viper.GetString("source"),
 				viper.GetString("prefix"),
-				viper.GetString("username"),
-				viper.GetString("password"),
 				viper.GetInt64("timeout"),
 			)
 		}

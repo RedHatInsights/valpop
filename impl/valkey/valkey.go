@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RedHatInsights/valpop/impl"
-	"github.com/valkey-io/valkey-go"
+	impl "github.com/RedHatInsights/valpop/impl"
+	vkc "github.com/valkey-io/valkey-go"
 )
 
 type Valkey struct {
 	ctx    context.Context
-	client valkey.Client
+	client vkc.Client
 }
 
 func NewValkey(addr string) (Valkey, error) {
-	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{addr}})
+	client, err := vkc.NewClient(vkc.ClientOption{InitAddress: []string{addr}})
 	if err != nil {
 		panic(err)
 	}
@@ -190,30 +190,23 @@ func writeFile(root, filepath, contents string) {
 	os.WriteFile(path, []byte(contents), 0664)
 }
 
-func PopulateFn(addr, source, prefix string, timeout int64) error {
+func (v *Valkey) PopulateFn(addr, source, prefix string, timeout int64) error {
 	currentTime := time.Now().Unix()
 
-	client, err := NewValkey(addr)
-	if err != nil {
-		return err
-	}
-
-	defer client.Close()
-
 	fileSystem := os.DirFS(source)
-	client.StartPopulate(prefix, currentTime)
-	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		return dumpFile(&client, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
+	v.StartPopulate(prefix, currentTime)
+	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		return dumpFile(v, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
-	client.EndPopulate(prefix, currentTime)
-	cleanupCache(&client, prefix, timeout)
+	v.EndPopulate(prefix, currentTime)
+	cleanupCache(v, prefix, timeout)
 	return nil
 }
 
-func dumpFile(client impl.CacheInterface, prefix, path string, d fs.DirEntry, timestamp string, err error) error {
+func dumpFile(client *Valkey, prefix, path string, d fs.DirEntry, timestamp string, err error) error {
 	if err != nil {
 		fmt.Printf("WE GOT AN ERR %v", err)
 	}
@@ -243,7 +236,7 @@ func dumpFile(client impl.CacheInterface, prefix, path string, d fs.DirEntry, ti
 	return nil
 }
 
-func cleanupCache(client impl.CacheInterface, prefix string, timeout int64) error {
+func cleanupCache(client *Valkey, prefix string, timeout int64) error {
 	// Soemthign like  filename[4,5,6,7]
 	cacheList, err := client.GetKeys(prefix)
 	if err != nil {

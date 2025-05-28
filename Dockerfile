@@ -3,7 +3,8 @@ USER root
 
 WORKDIR /opt/app-root/src/valpop
 COPY . .
-RUN go build -o valpop -ldflags="-s -w"
+# statically building so it doesn't depend on GLIBC
+RUN CGO_ENABLED=0 go build -o valpop -ldflags="-s -w"
 
 FROM registry.access.redhat.com/ubi9-minimal:latest
 

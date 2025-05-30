@@ -54,3 +54,9 @@ Flags:
 
 Use "valpop [command] --help" for more information about a command.
 ```
+
+# Running with Podman
+```
+$ podman build -f Dockerfile -t valpop .
+$ podman run -it valpop {args}
+```

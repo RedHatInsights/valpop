@@ -23,7 +23,8 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/hcc-platex-services-tenant/valpop:{{revision}}
+    value: quay.io/repository/redhat-services-prod/hcc-platex-services-tenant/valpop:{{revision}}
+
   - name: dockerfile
     value: /Dockerfile
   pipelineRef:

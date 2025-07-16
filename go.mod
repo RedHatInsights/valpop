@@ -1,6 +1,6 @@
 module github.com/RedHatInsights/valpop
 
-go 1.23.0
+go 1.24.4
 
 require (
 	github.com/minio/minio-go/v7 v7.0.88

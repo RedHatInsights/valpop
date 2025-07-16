@@ -90,6 +90,10 @@ func (m *Minio) PopulateFn(addr, source, prefix string, timeout int64) error {
 	m.StartPopulate(prefix, currentTime)
 	manifest := Manifest{}
 	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+		  	return err
+		}
+
 		if d.IsDir() {
 			return nil
 		}

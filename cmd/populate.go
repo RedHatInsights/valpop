@@ -45,6 +45,7 @@ var populateCmd = &cobra.Command{
 			defer client.Close()
 			return client.PopulateFn(
 				addr,
+				bucket,
 				viper.GetString("source"),
 				viper.GetString("prefix"),
 				viper.GetInt64("timeout"),

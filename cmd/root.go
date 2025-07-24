@@ -8,6 +8,7 @@ import (
 )
 
 var addr string
+var bucket string
 
 var rootCmd = &cobra.Command{
 	Use:   "valpop",
@@ -15,6 +16,7 @@ var rootCmd = &cobra.Command{
 	Long:  "pops or populates Valkey for Frontends - ya know",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		addr = fmt.Sprintf("%s:%s", viper.GetString("hostname"), viper.GetString("port"))
+		bucket = viper.GetString("bucket")
 		if viper.GetString("mode") == "s3" {
 			if viper.GetString("username") == "" {
 				return fmt.Errorf("can't have s3 with no username")
@@ -36,11 +38,13 @@ func init() {
 	rootCmd.PersistentFlags().StringP("mode", "m", "s3", "Mode, s3 or valkey")
 	rootCmd.PersistentFlags().StringP("username", "u", "", "Username for S3")
 	rootCmd.PersistentFlags().StringP("password", "c", "", "Password for S3")
+	rootCmd.PersistentFlags().StringP("bucket", "b", "frontend", "S3 bucket name")
 	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("mode", rootCmd.PersistentFlags().Lookup("mode"))
 	viper.BindPFlag("username", rootCmd.PersistentFlags().Lookup("username"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
+	viper.BindPFlag("bucket", rootCmd.PersistentFlags().Lookup("bucket"))
 }
 
 func Execute() error {

@@ -55,10 +55,11 @@ func (m *Minio) EndPopulate(namespace, bucket string, timestamp int64) error {
 
 func (m *Minio) SetItem(namespace, filepath, bucket string, timestamp int64, contents string) error {
 	key := makeDataPath(namespace, filepath, timestamp)
+	content_len := len(contents)
+	
+	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
 
-	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, len(contents))
-
-	_, err := m.client.FPutObject(m.ctx, bucket, key, filepath, minio.PutObjectOptions{})
+	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("err from s3:%w", err)
 	}
@@ -98,7 +99,7 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) e
 			return nil
 		}
 
-		fmt.Printf("Processing file: %s\n", path)
+		fmt.Printf("Finding file: %s\n", path)
 		contents, werr := fs.ReadFile(fileSystem, path)
 		if werr != nil {
 			return werr
@@ -108,6 +109,7 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) e
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
+		return err
 	}
 
 	err = m.SetManifest(prefix, bucket, currentTime, manifest)

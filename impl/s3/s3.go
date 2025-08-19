@@ -98,7 +98,8 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) e
 			return nil
 		}
 
-		contents, werr := os.ReadFile(path)
+		fmt.Printf("Processing file: %s\n", path)
+		contents, werr := fs.ReadFile(fileSystem, path)
 		if werr != nil {
 			return werr
 		}

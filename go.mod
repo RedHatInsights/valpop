@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/minio/minio-go/v7 v7.0.95
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.19.0
 	github.com/valkey-io/valkey-go v1.0.64
 )

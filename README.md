@@ -47,13 +47,71 @@ Available Commands:
   pop         copies to the dest for serving
   populate    populates the cache
 
-Flags:
+Global Flags:
   -h, --help              help for valpop
   -a, --hostname string   Valkey hostname (default "127.0.0.1")
   -p, --port string       Valkey port (default "6379")
+  -m, --mode string       Mode, s3 or valkey (default "s3")
+  -u, --username string   Username for S3
+  -c, --password string   Password for S3
+  -b, --bucket string     S3 bucket name (default "frontend")
 
 Use "valpop [command] --help" for more information about a command.
 ```
+
+## Commands
+
+### populate
+Populates the cache from the source directory.
+
+**Usage:**
+```
+valpop populate [flags]
+```
+
+**Flags:**
+```
+  -s, --source string     Source directory (required)
+  -r, --prefix string     Prefix for dir structure and cache (required)
+  -t, --timeout int       Timeout for cache (default 30)
+```
+
+**Example:**
+```bash
+valpop populate --source /path/to/assets --prefix myapp --timeout 60
+```
+
+### pop
+Copies cached files to the destination directory for serving.
+
+**Usage:**
+```
+valpop pop [flags]
+```
+
+**Flags:**
+```
+  -d, --dest string       Destination directory (required)
+```
+
+**Example:**
+```bash
+valpop pop --dest /var/www/html
+```
+
+### Environment Variables
+All flags can also be set using environment variables with the `VALPOP_` prefix:
+
+- `VALPOP_HOSTNAME` - Valkey hostname
+- `VALPOP_PORT` - Valkey port
+- `VALPOP_MODE` - Mode (s3 or valkey)
+- `VALPOP_USERNAME` - S3 username
+- `VALPOP_PASSWORD` - S3 password
+- `VALPOP_BUCKET` - S3 bucket name
+- `VALPOP_SOURCE` - Source directory
+- `VALPOP_PREFIX` - Prefix for cache keys
+- `VALPOP_TIMEOUT` - Cache timeout
+- `VALPOP_DEST` - Destination directory
 
 # Running with Podman
 ```

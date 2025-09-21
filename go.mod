@@ -6,7 +6,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
-	github.com/valkey-io/valkey-go v1.0.64
+	github.com/valkey-io/valkey-go v1.0.65
 )
 
 require (

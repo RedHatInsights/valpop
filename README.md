@@ -11,9 +11,11 @@ The `prefix` is intended to be the application name. The `source` is a directory
 where the root of the files lives.
 
 The `timestamp` should be the build timestamp of the container and is important.
-After population, Valpop will clean up all files which are older than the `timestamp` specified, but will always leave the latest version. If files are
-newer than the timestamp then multiple version will be kept. Not setting `timestamp`
-will yield many versions of the same file landing in the cache.
+After population, Valpop will clean up old cache entries based on two criteria:
+1. **Timeout**: Entries older than the specified timeout will be eligible for cleanup
+2. **Minimum Asset Records**: At least the specified minimum number of asset versions will always be preserved, regardless of timeout
+
+This ensures that even if all cached versions exceed the timeout, the most recent versions are still retained for availability.
 
 Future versions of Valpop may do deduplication for efficient cache usage.
 
@@ -27,12 +29,6 @@ If the desired behaviour were to rollback, a revert commit should be used to
 build a new version of the image, OR the cache would need purging manually of
 that content.
 
-# Running locally
-A ValKey instance is required. Podman can help.
-```
-docker run --replace --name some-valkey --network host -d valkey/valkey
-docker run -it --network host --rm valkey/valkey valkey-cli -h 127.0.0.1
-```
 
 # Usage
 ```
@@ -71,14 +67,22 @@ valpop populate [flags]
 
 **Flags:**
 ```
-  -s, --source string     Source directory (required)
-  -r, --prefix string     Prefix for dir structure and cache (required)
-  -t, --timeout int       Timeout for cache (default 30)
+  -s, --source string           Source directory (required)
+  -r, --prefix string           Prefix for dir structure and cache (required)
+  -t, --timeout int             Timeout for cache cleanup in seconds (default 30)
+  -n, --min-asset-records int   Minimum number of asset records to keep (default 3)
 ```
 
-**Example:**
+**Examples:**
 ```bash
+# Basic usage with default minimum asset records (3)
 valpop populate --source /path/to/assets --prefix myapp --timeout 60
+
+# Keep at least 5 versions of each asset, even if they exceed timeout
+valpop populate --source /path/to/assets --prefix myapp --timeout 60 --min-asset-records 5
+
+# Using short flags
+valpop populate -s /path/to/assets -r myapp -t 60 -n 5
 ```
 
 ### pop
@@ -99,6 +103,36 @@ valpop pop [flags]
 valpop pop --dest /var/www/html
 ```
 
+## Cache Cleanup Behavior
+
+When running `populate`, Valpop performs intelligent cache cleanup based on two parameters:
+
+### Timeout (`--timeout` / `-t`)
+- **Default**: 30 seconds
+- **Purpose**: Defines how old an asset can be before it becomes eligible for cleanup
+- **Behavior**: Assets older than this threshold will be considered for removal
+
+### Minimum Asset Records (`--min-asset-records` / `-n`)
+- **Default**: 3
+- **Purpose**: Ensures a minimum number of asset versions are always preserved
+- **Behavior**: At least this many versions of each asset will be kept, regardless of age
+
+### Cleanup Logic
+The cleanup process follows this priority:
+1. **Always preserve** at least `min-asset-records` versions of each asset (newest first)
+2. **Only delete** versions that are both:
+   - Beyond the minimum count requirement AND
+   - Older than the `timeout` threshold
+
+### Examples
+```bash
+# Scenario 1: Only keep 1 version, clean up after 5 minutes
+valpop populate -s ./assets -r myapp -t 300 -n 1
+
+# Scenario 2: Keep 10 versions, clean up after 24 hours
+valpop populate -s ./assets -r myapp -t 86400 -n 10
+```
+
 ### Environment Variables
 All flags can also be set using environment variables with the `VALPOP_` prefix:
 
@@ -110,11 +144,58 @@ All flags can also be set using environment variables with the `VALPOP_` prefix:
 - `VALPOP_BUCKET` - S3 bucket name
 - `VALPOP_SOURCE` - Source directory
 - `VALPOP_PREFIX` - Prefix for cache keys
-- `VALPOP_TIMEOUT` - Cache timeout
+- `VALPOP_TIMEOUT` - Cache timeout in seconds
+- `VALPOP_MIN_ASSET_RECORDS` - Minimum number of asset records to keep
 - `VALPOP_DEST` - Destination directory
 
-# Running with Podman
+# Building with Podman
+```bash
+podman build -f Dockerfile -t valpop .
+podman run -it valpop {args}
 ```
-$ podman build -f Dockerfile -t valpop .
-$ podman run -it valpop {args}
+
+# Testing locally
+
+You will need to have `podman` installed to test the interaction between valkey or minio (s3)
+
+To build the valpop cli, run:
+
+```bash
+make build
 ```
+
+### Testing with minio (s3)
+
+1. Start the minio server by running:
+   ```bash
+   make start-minio
+   ```
+2. From a different tab in your terminal, run the following command to create the necessary bucket:
+   ```bash
+   make create-minio-buckets
+   ```
+3. Upload to minio using valpop by running:
+   ```bash
+   make minio-test-upload
+   ```
+4. To verify, log into the minio WebUI (url should be displayed to you after completing step 1, but this is usually: http://127.0.0.1:10000). The username and password (MINIO_ACCESS_KEY/MINIO_SECRET_KEY) for the minio console are in the `.env` file.
+
+
+### Testing with valkey
+
+1. Start the valkey server by running:
+   ```bash
+   make start-valkey
+   ```
+2. Upload to valkey using the valpop cli by running:
+   ```bash
+   make valkey-test-upload
+   ```
+3. To verify your upload, you will need to first start the valkey cli by running:
+   ```bash
+   make start-valkey-cli
+   ```
+4. Then inside the CLI, run the command:
+   ```bash
+   keys *
+   ```

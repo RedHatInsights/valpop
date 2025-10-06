@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,7 +57,7 @@ func (m *Minio) EndPopulate(namespace, bucket string, timestamp int64) error {
 func (m *Minio) SetItem(namespace, filepath, bucket string, timestamp int64, contents string) error {
 	key := makeDataPath(namespace, filepath, timestamp)
 	content_len := len(contents)
-	
+
 	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
 
 	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{})
@@ -84,7 +85,7 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Man
 
 type Manifest []string
 
-func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) error {
+func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 
 	fileSystem := os.DirFS(source)
@@ -92,7 +93,7 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) e
 	manifest := Manifest{}
 	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-		  	return err
+			return err
 		}
 
 		if d.IsDir() {
@@ -122,48 +123,74 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64) e
 		return err
 	}
 
-	return m.CleanupCache(prefix, bucket, timeout)
+	return m.CleanupCache(prefix, bucket, timeout, minAssetRecords)
 }
 
-func (m *Minio) CleanupCache(prefix, bucket string, timeout int64) error {
+func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 	bucketPrefix := "manifests/" + prefix + "/"
 	oldFiles := map[string]bool{}
 	newFiles := map[string]bool{}
-	oldManifests := []string{}
+
+	// Collect all manifests with their timestamps
+	type manifestInfo struct {
+		key       string
+		timestamp int64
+	}
+	allManifests := []manifestInfo{}
+
 	for object := range m.client.ListObjects(m.ctx, bucket, minio.ListObjectsOptions{Prefix: bucketPrefix, Recursive: true}) {
 		timestampString, _ := strings.CutPrefix(object.Key, "manifests/"+prefix+"/")
 		timestamp, err := strconv.Atoi(timestampString)
 		if err != nil {
 			return fmt.Errorf("could not get timestamp: %w", err)
 		}
-		if currentTime-int64(timestamp) > timeout {
-			manifest, err := m.getManifest(object.Key, bucket)
+		allManifests = append(allManifests, manifestInfo{
+			key:       object.Key,
+			timestamp: int64(timestamp),
+		})
+	}
+
+	// Sort manifests by timestamp (newest first)
+	sort.Slice(allManifests, func(i, j int) bool {
+		return allManifests[i].timestamp > allManifests[j].timestamp
+	})
+
+	// Determine which manifests can be deleted
+	oldManifests := []string{}
+	for i, manifest := range allManifests {
+		// Keep at least minAssetRecords manifests regardless of timeout
+		if int64(i) >= minAssetRecords && currentTime-manifest.timestamp > timeout {
+			manifestData, err := m.getManifest(manifest.key, bucket)
 			if err != nil {
 				return fmt.Errorf("could not get manifest: %w", err)
 			}
 
-			for _, file := range manifest {
+			for _, file := range manifestData {
 				oldFiles[file] = true
 			}
-			oldManifests = append(oldManifests, object.Key)
+			oldManifests = append(oldManifests, manifest.key)
 		} else {
-			manifest, err := m.getManifest(object.Key, bucket)
+			// This manifest should be kept
+			manifestData, err := m.getManifest(manifest.key, bucket)
 			if err != nil {
 				return fmt.Errorf("could not get manifest: %w", err)
 			}
 
-			for _, file := range manifest {
+			for _, file := range manifestData {
 				newFiles[file] = true
 			}
 		}
 	}
+
+	// Protect files that are still referenced in newer manifests
 	for file := range newFiles {
 		fmt.Printf("Protecting: %s\n", file)
 		delete(oldFiles, file)
 	}
 	delete(oldFiles, "fedmods.json")
 
+	// Remove old files
 	for file := range oldFiles {
 		err := m.client.RemoveObject(m.ctx, bucket, makeDataPath(prefix, file, currentTime), minio.RemoveObjectOptions{})
 		if err != nil {
@@ -172,6 +199,7 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64) error {
 		fmt.Printf("Removed file %s\n", file)
 	}
 
+	// Remove old manifests
 	for _, file := range oldManifests {
 		err := m.client.RemoveObject(m.ctx, bucket, file, minio.RemoveObjectOptions{})
 		if err != nil {

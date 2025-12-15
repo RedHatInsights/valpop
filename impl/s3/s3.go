@@ -246,5 +246,5 @@ func getContentType(filepath string) string {
 	case strings.HasSuffix(filepath, ".json"):
 		return "application/json"
 	}
-	return "application/javascript"
+	return "application/octet-stream"
 }

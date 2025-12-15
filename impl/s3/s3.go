@@ -54,13 +54,13 @@ func (m *Minio) EndPopulate(namespace, bucket string, timestamp int64) error {
 	return nil
 }
 
-func (m *Minio) SetItem(namespace, filepath, bucket string, timestamp int64, contents string) error {
+func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timestamp int64, contents string) error {
 	key := makeDataPath(namespace, filepath, timestamp)
 	content_len := len(contents)
 
 	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
 
-	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{})
+	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
 		return fmt.Errorf("err from s3:%w", err)
 	}
@@ -106,7 +106,8 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 			return werr
 		}
 		manifest = append(manifest, path)
-		return m.SetItem(prefix, path, bucket, currentTime, string(contents))
+		contentType := getContentType(path)
+		return m.SetItem(prefix, path, contentType, bucket, currentTime, string(contents))
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
@@ -228,4 +229,22 @@ func (m *Minio) getManifest(key, bucket string) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("could not unmarshal object: %w", err)
 	}
 	return manifest, nil
+}
+
+func getContentType(filepath string) string {
+	switch {
+	case strings.HasSuffix(filepath, ".html"):
+		return "text/html; charset=utf-8"
+	case strings.HasSuffix(filepath, ".css"):
+		return "text/css; charset=utf-8"
+	case strings.HasSuffix(filepath, ".js"):
+		return "application/javascript"
+	case strings.HasSuffix(filepath, ".woff2"):
+		return "font/woff2"
+	case strings.HasSuffix(filepath, ".svg"):
+		return "image/svg+xml"
+	case strings.HasSuffix(filepath, ".json"):
+		return "application/json"
+	}
+	return "application/javascript"
 }

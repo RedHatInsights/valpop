@@ -245,8 +245,7 @@ func getContentType(filepath string) string {
 		return "image/svg+xml"
 	case strings.HasSuffix(filepath, ".png"):
 		return "image/png"
-	case strings.HasSuffix(filepath, ".jpeg")
-		|| strings.HasSuffix(filepath, ".jpg"):
+	case strings.HasSuffix(filepath, ".jpeg") || strings.HasSuffix(filepath, ".jpg"):
 		return "image/jpeg"
 	case strings.HasSuffix(filepath, ".json"):
 		return "application/json"

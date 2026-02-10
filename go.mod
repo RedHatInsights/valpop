@@ -2,6 +2,8 @@ module github.com/RedHatInsights/valpop
 
 // go version 1.24.6 is not available in the Red Hat UBI9 go-toolset builder image as of 2025-10-03
 go 1.24.4
+// go version 1.24.6 is not available in the Red Hat UBI9 go-toolset builder image as of 2025-10-03
+go 1.24.4
 
 require (
 	github.com/minio/minio-go/v7 v7.0.95
@@ -9,7 +11,7 @@ require (
 	github.com/onsi/gomega v1.38.2
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
-	github.com/valkey-io/valkey-go v1.0.54
+	github.com/valkey-io/valkey-go v1.0.66
 )
 
 require (

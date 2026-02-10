@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,8 +58,10 @@ func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timesta
 	key := impl.MakeDataKey(namespace, filepath)
 	content_len := len(contents)
 
+
 	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
 
+	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{ContentType: contentType})
 	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
 		return fmt.Errorf("err from s3:%w", err)
@@ -84,6 +87,7 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Man
 
 type Manifest []string
 
+func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error {
 func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 
@@ -111,8 +115,10 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 	}
 
 	return m.CleanupCache(prefix, bucket, timeout, minAssetRecords)
+	return m.CleanupCache(prefix, bucket, timeout, minAssetRecords)
 }
 
+func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error {
 func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 	bucketPrefix := "manifests/" + prefix + "/"
@@ -185,4 +191,26 @@ func (m *Minio) getManifest(key, bucket string) (Manifest, error) {
 	}
 
 	return Manifest(files), nil
+}
+
+func getContentType(filepath string) string {
+	switch {
+	case strings.HasSuffix(filepath, ".html"):
+		return "text/html; charset=utf-8"
+	case strings.HasSuffix(filepath, ".css"):
+		return "text/css; charset=utf-8"
+	case strings.HasSuffix(filepath, ".js"):
+		return "application/javascript"
+	case strings.HasSuffix(filepath, ".woff2"):
+		return "font/woff2"
+	case strings.HasSuffix(filepath, ".svg"):
+		return "image/svg+xml"
+	case strings.HasSuffix(filepath, ".png"):
+		return "image/png"
+	case strings.HasSuffix(filepath, ".jpeg") || strings.HasSuffix(filepath, ".jpg"):
+		return "image/jpeg"
+	case strings.HasSuffix(filepath, ".json"):
+		return "application/json"
+	}
+	return "application/octet-stream"
 }

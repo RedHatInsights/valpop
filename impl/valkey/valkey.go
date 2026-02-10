@@ -190,23 +190,23 @@ func writeFile(root, filepath, contents string) {
 	os.WriteFile(path, []byte(contents), 0664)
 }
 
-func (v *Valkey) PopulateFn(addr, source, prefix string, timeout int64) error {
+func (v *Valkey) PopulateFn(addr, source, prefix string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 
 	fileSystem := os.DirFS(source)
 	v.StartPopulate(prefix, currentTime)
 	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		return dumpFile(v, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
+		return dumpFile(v, fileSystem, prefix, path, d, fmt.Sprintf("%d", currentTime), err)
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
 	v.EndPopulate(prefix, currentTime)
-	cleanupCache(v, prefix, timeout)
+	cleanupCache(v, prefix, timeout, minAssetRecords)
 	return nil
 }
 
-func dumpFile(client *Valkey, prefix, path string, d fs.DirEntry, timestamp string, err error) error {
+func dumpFile(client *Valkey, fileSystem fs.FS, prefix, path string, d fs.DirEntry, timestamp string, err error) error {
 	if err != nil {
 		fmt.Printf("WE GOT AN ERR %v", err)
 	}
@@ -215,7 +215,7 @@ func dumpFile(client *Valkey, prefix, path string, d fs.DirEntry, timestamp stri
 		return nil
 	}
 
-	contents, err := os.ReadFile(path)
+	contents, err := fs.ReadFile(fileSystem, path)
 	if err != nil {
 		return err
 	}
@@ -236,24 +236,37 @@ func dumpFile(client *Valkey, prefix, path string, d fs.DirEntry, timestamp stri
 	return nil
 }
 
-func cleanupCache(client *Valkey, prefix string, timeout int64) error {
-	// Soemthign like  filename[4,5,6,7]
+func cleanupCache(client *Valkey, prefix string, timeout int64, minAssetRecords int64) error {
+	// Get all cached items for this prefix
 	cacheList, err := client.GetKeys(prefix)
 	if err != nil {
 		return err
 	}
 	deleteItems := make(impl.AllItems)
 	deleteItems[prefix] = make(impl.Items)
-	for filename, stamps := range cacheList[prefix] {
 
+	for filename, stamps := range cacheList[prefix] {
+		// Sort stamps in descending order (newest first)
 		slices.Sort(stamps)
-		for z := range stamps[1:] {
-			if stamps[z] < time.Now().Unix()-timeout {
-				fmt.Printf("del: %s:%d\n", filename, stamps[z])
-				deleteItems[prefix][filename] = append(deleteItems[prefix][filename], stamps[z])
+		slices.Reverse(stamps)
+
+		// Determine how many versions to keep for this file
+		keepCount := minAssetRecords
+		if keepCount > int64(len(stamps)) {
+			keepCount = int64(len(stamps))
+		}
+
+		// Check versions beyond the minimum required
+		for i := int(keepCount); i < len(stamps); i++ {
+			timestamp := stamps[i]
+			// Only delete if it's also older than the timeout
+			if time.Now().Unix()-timestamp > timeout {
+				fmt.Printf("del: %s:%d\n", filename, timestamp)
+				deleteItems[prefix][filename] = append(deleteItems[prefix][filename], timestamp)
 			}
 		}
 	}
+
 	fmt.Printf("%v", deleteItems)
 	err = client.DelKeys(deleteItems)
 	if err != nil {

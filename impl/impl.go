@@ -41,7 +41,6 @@ func MakeManifestKey(namespace string, timestamp int64) string {
 	return fmt.Sprintf("manifests/%s/%d", namespace, timestamp)
 }
 
-// GetContentType returns the MIME type based on file extension
 func GetContentType(filepath string) string {
 	switch {
 	case strings.HasSuffix(filepath, ".html"):
@@ -54,6 +53,10 @@ func GetContentType(filepath string) string {
 		return "font/woff2"
 	case strings.HasSuffix(filepath, ".svg"):
 		return "image/svg+xml"
+	case strings.HasSuffix(filepath, ".png"):
+		return "image/png"
+	case strings.HasSuffix(filepath, ".jpeg") || strings.HasSuffix(filepath, ".jpg"):
+		return "image/jpeg"
 	case strings.HasSuffix(filepath, ".json"):
 		return "application/json"
 	}

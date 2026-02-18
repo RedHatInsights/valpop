@@ -38,7 +38,7 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 			It("should store manifests correctly", func() {
 				manifest := s3.Manifest{"index.html", "style.css", "app.js"}
 
-				err := mockService.SetManifest(testNamespace, testBucket, testTimestamp, manifest)p, manifest)
+				err := mockService.SetManifest(testNamespace, testBucket, testTimestamp, manifest)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify the manifest was stored
@@ -95,7 +95,7 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 				recentManifest := s3.Manifest{"recent-file1.txt", "recent-file2.txt"}
 
 				// Store manifests
-				err := mockService.SetManifest(testNamespace, testBucket, oldTimestamp, oldManifest)anifest)
+				err := mockService.SetManifest(testNamespace, testBucket, oldTimestamp, oldManifest)
 				Expect(err).ToNot(HaveOccurred())
 				err = mockService.SetManifest(testNamespace, testBucket, recentTimestamp, recentManifest)
 				Expect(err).ToNot(HaveOccurred())
@@ -181,16 +181,16 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 		Context("Complete populate workflow", func() {
 			It("should execute populate workflow operations in correct order", func() {
 				// Execute populate workflow
-				err := mockService.StartPopulate(testNamespace, testBucket, 123)et, 123)
+				err := mockService.StartPopulate(testNamespace, testBucket, 123)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.SetItem(testNamespace, "index.html", "text/html", testBucket, 123, "<html></html>")/html>")
+				err = mockService.SetItem(testNamespace, "index.html", "text/html", testBucket, 123, "<html></html>")
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.SetManifest(testNamespace, testBucket, 123, s3.Manifest{"index.html"}).html"})
+				err = mockService.SetManifest(testNamespace, testBucket, 123, s3.Manifest{"index.html"})
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.EndPopulate(testNamespace, testBucket, 123)et, 123)
+				err = mockService.EndPopulate(testNamespace, testBucket, 123)
 				Expect(err).ToNot(HaveOccurred())
 
 				err = mockService.CleanupCache(testNamespace, testBucket, 3600, 3)

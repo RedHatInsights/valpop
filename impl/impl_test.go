@@ -127,6 +127,11 @@ func (m *MockStorage) Close() {
 }
 
 var _ = Describe("Storage Backend Drop-in Replacements", func() {
+	var (
+		testNamespace = "test-app"
+		testBucket    = "test-bucket"
+		testTimestamp = int64(1234567890)
+	)
 
 	Describe("Drop-in replacement demonstration", func() {
 		Context("MockStorage backend", func() {
@@ -143,32 +148,28 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 			})
 
 			It("should complete a full lifecycle", func() {
-				namespace := "test-app"
-				timestamp := int64(1234567890)
 				filepath := "index.html"
 				content := "<html><body>Test Content</body></html>"
 
 				// Start populate
-				err := mockBackend.StartPopulate(namespace, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Store item
-				err = mockBackend.SetItem(namespace, filepath, "text/plain", "test-bucket", timestamp, content)
+				err = mockBackend.SetItem(testNamespace, filepath, "text/plain", testBucket, testTimestamp, content)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Retrieve item
-				retrieved, err := mockBackend.GetItem(namespace, filepath, timestamp)
+				retrieved, err := mockBackend.GetItem(testNamespace, filepath, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(retrieved).To(Equal(content))
 
 				// End populate
-				err = mockBackend.EndPopulate(namespace, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should handle multiple items", func() {
-				namespace := "test-app"
-				timestamp := int64(1234567890)
 				items := map[string]string{
 					"index.html": "<html><head><title>Test</title></head><body>Home</body></html>",
 					"app.js":     "console.log('App loaded');",
@@ -176,47 +177,45 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 				}
 
 				// Start populate
-				err := mockBackend.StartPopulate(namespace, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Store multiple items
 				for path, content := range items {
-					err := mockBackend.SetItem(namespace, path, "text/plain", "test-bucket", timestamp, content)
+					err := mockBackend.SetItem(testNamespace, path, "text/plain", testBucket, testTimestamp, content)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// Retrieve all items
 				for path, expectedContent := range items {
-					retrieved, err := mockBackend.GetItem(namespace, path, timestamp)
+					retrieved, err := mockBackend.GetItem(testNamespace, path, testTimestamp)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(retrieved).To(Equal(expectedContent))
 				}
 
 				// End populate
-				err = mockBackend.EndPopulate(namespace, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should handle deletion", func() {
-				namespace := "test-app"
-				timestamp := int64(1234567890)
 				filepath := "index.html"
 				content := "<html><body>Test Content</body></html>"
 
 				// Store some items first
-				err := mockBackend.StartPopulate(namespace, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockBackend.SetItem(namespace, filepath, "text/plain", "test-bucket", timestamp, content)
+				err = mockBackend.SetItem(testNamespace, filepath, "text/plain", testBucket, testTimestamp, content)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockBackend.EndPopulate(namespace, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(testNamespace, testBucket, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Create deletion data
 				allItems := impl.AllItems{
-					namespace: impl.Items{
-						filepath: []int64{timestamp},
+					testNamespace: impl.Items{
+						filepath: []int64{testTimestamp},
 					},
 				}
 
@@ -225,7 +224,7 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify deletion (item should be empty/not found)
-				retrieved, err := mockBackend.GetItem(namespace, filepath, timestamp)
+				retrieved, err := mockBackend.GetItem(testNamespace, filepath, testTimestamp)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(retrieved).To(BeEmpty())
 			})
@@ -265,11 +264,20 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 	})
 
 	Describe("Real-world usage scenarios", func() {
+		var mockBackend *MockStorage
+
+		BeforeEach(func() {
+			mockBackend = NewMockStorage()
+		})
+
+		AfterEach(func() {
+			if mockBackend != nil {
+				mockBackend.Close()
+			}
+		})
+
 		Context("Complete populate and retrieve workflow", func() {
 			It("should handle a deployment with nested paths", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				namespace := "my-web-app"
 				timestamp := int64(1700000000)
 
@@ -280,15 +288,15 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 					"api/config.json":     `{"version": "1.0.0"}`,
 				}
 
-				err := mockBackend.StartPopulate(namespace, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(namespace, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				for filepath, content := range files {
-					err := mockBackend.SetItem(namespace, filepath, "text/plain", "test-bucket", timestamp, content)
+					err := mockBackend.SetItem(namespace, filepath, "text/plain", testBucket, timestamp, content)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				err = mockBackend.EndPopulate(namespace, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(namespace, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify nested path handling
@@ -300,20 +308,17 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 			})
 
 			It("should handle multiple timestamped deployments", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				namespace := "my-app"
 				timestamp1 := int64(1700000000)
 				timestamp2 := int64(1700001000)
 
 				// Deploy two versions
 				for i, ts := range []int64{timestamp1, timestamp2} {
-					err := mockBackend.StartPopulate(namespace, "test-bucket", ts)
+					err := mockBackend.StartPopulate(namespace, testBucket, ts)
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.SetItem(namespace, "index.html", "text/html", "test-bucket", ts, fmt.Sprintf("<html>Version %d</html>", i+1))
+					err = mockBackend.SetItem(namespace, "index.html", "text/html", testBucket, ts, fmt.Sprintf("<html>Version %d</html>", i+1))
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.EndPopulate(namespace, "test-bucket", ts)
+					err = mockBackend.EndPopulate(namespace, testBucket, ts)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
@@ -325,19 +330,16 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 			})
 
 			It("should handle cleanup of old deployments", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				namespace := "cleanup-test"
 
 				// Create multiple old deployments
 				timestamps := []int64{1700000000, 1700001000, 1700002000}
 				for _, ts := range timestamps {
-					err := mockBackend.StartPopulate(namespace, "test-bucket", ts)
+					err := mockBackend.StartPopulate(namespace, testBucket, ts)
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.SetItem(namespace, "file.txt", "text/plain", "test-bucket", ts, fmt.Sprintf("Content at %d", ts))
+					err = mockBackend.SetItem(namespace, "file.txt", "text/plain", testBucket, ts, fmt.Sprintf("Content at %d", ts))
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.EndPopulate(namespace, "test-bucket", ts)
+					err = mockBackend.EndPopulate(namespace, testBucket, ts)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
@@ -369,18 +371,17 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 
 		Context("Error handling scenarios", func() {
 			It("should handle operations on closed storage", func() {
-				mockBackend := NewMockStorage()
 				mockBackend.Close()
 
 				namespace := "test"
 				timestamp := int64(1700000000)
 
 				// All operations on closed storage should fail
-				err := mockBackend.StartPopulate(namespace, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(namespace, testBucket, timestamp)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("closed"))
 
-				err = mockBackend.SetItem(namespace, "file.txt", "text/plain", "test-bucket", timestamp, "content")
+				err = mockBackend.SetItem(namespace, "file.txt", "text/plain", testBucket, timestamp, "content")
 				Expect(err).To(HaveOccurred())
 
 				_, err = mockBackend.GetItem(namespace, "file.txt", timestamp)
@@ -388,18 +389,12 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 			})
 
 			It("should handle retrieval of non-existent items", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				content, err := mockBackend.GetItem("nonexistent", "file.txt", 999)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(content).To(BeEmpty())
 			})
 
 			It("should handle deletion of non-existent items gracefully", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				allItems := impl.AllItems{
 					"nonexistent": impl.Items{
 						"file.txt": []int64{999, 1000},
@@ -413,26 +408,23 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 
 		Context("Multi-namespace scenarios", func() {
 			It("should isolate data between different namespaces", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				namespace1 := "app1"
 				namespace2 := "app2"
 				timestamp := int64(1700000000)
 
 				// Store same file in different namespaces
-				err := mockBackend.StartPopulate(namespace1, "test-bucket", timestamp)
+				err := mockBackend.StartPopulate(namespace1, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
-				err = mockBackend.SetItem(namespace1, "config.json", "application/json", "test-bucket", timestamp, `{"app": "app1"}`)
+				err = mockBackend.SetItem(namespace1, "config.json", "application/json", testBucket, timestamp, `{"app": "app1"}`)
 				Expect(err).ToNot(HaveOccurred())
-				err = mockBackend.EndPopulate(namespace1, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(namespace1, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockBackend.StartPopulate(namespace2, "test-bucket", timestamp)
+				err = mockBackend.StartPopulate(namespace2, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
-				err = mockBackend.SetItem(namespace2, "config.json", "application/json", "test-bucket", timestamp, `{"app": "app2"}`)
+				err = mockBackend.SetItem(namespace2, "config.json", "application/json", testBucket, timestamp, `{"app": "app2"}`)
 				Expect(err).ToNot(HaveOccurred())
-				err = mockBackend.EndPopulate(namespace2, "test-bucket", timestamp)
+				err = mockBackend.EndPopulate(namespace2, testBucket, timestamp)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify each namespace has its own data
@@ -446,20 +438,17 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 			})
 
 			It("should handle deletion in one namespace without affecting others", func() {
-				mockBackend := NewMockStorage()
-				defer mockBackend.Close()
-
 				namespace1 := "app1"
 				namespace2 := "app2"
 				timestamp := int64(1700000000)
 
 				// Store data in both namespaces
 				for _, ns := range []string{namespace1, namespace2} {
-					err := mockBackend.StartPopulate(ns, "test-bucket", timestamp)
+					err := mockBackend.StartPopulate(ns, testBucket, timestamp)
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.SetItem(ns, "file.txt", "text/plain", "test-bucket", timestamp, fmt.Sprintf("Content for %s", ns))
+					err = mockBackend.SetItem(ns, "file.txt", "text/plain", testBucket, timestamp, fmt.Sprintf("Content for %s", ns))
 					Expect(err).ToNot(HaveOccurred())
-					err = mockBackend.EndPopulate(ns, "test-bucket", timestamp)
+					err = mockBackend.EndPopulate(ns, testBucket, timestamp)
 					Expect(err).ToNot(HaveOccurred())
 				}
 

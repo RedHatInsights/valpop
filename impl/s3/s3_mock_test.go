@@ -12,7 +12,12 @@ import (
 )
 
 var _ = Describe("S3 Implementation with Mocks", func() {
-	var mockService *mock.S3Service
+	var (
+		mockService   *mock.S3Service
+		testNamespace = "testapp"
+		testBucket    = "test-bucket"
+		testTimestamp = int64(1234567890)
+	)
 
 	BeforeEach(func() {
 		mockService = mock.NewS3Service()
@@ -31,16 +36,13 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 
 		Context("SetManifest", func() {
 			It("should store manifests correctly", func() {
-				namespace := "testapp"
-				bucket := "test-bucket"
-				timestamp := int64(1234567890)
 				manifest := s3.Manifest{"index.html", "style.css", "app.js"}
 
-				err := mockService.SetManifest(namespace, bucket, timestamp, manifest)
+				err := mockService.SetManifest(testNamespace, testBucket, testTimestamp, manifest)p, manifest)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify the manifest was stored
-				storedManifest, exists := mockService.GetStoredManifest(namespace, timestamp)
+				storedManifest, exists := mockService.GetStoredManifest(testNamespace, testTimestamp)
 				Expect(exists).To(BeTrue())
 				Expect(storedManifest).To(Equal(manifest))
 
@@ -83,8 +85,6 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 	Describe("File Deletion Operations", func() {
 		Context("CleanupCache", func() {
 			It("should delete old manifests based on timeout", func() {
-				namespace := "testapp"
-				bucket := "test-bucket"
 				currentTime := time.Now().Unix()
 
 				// Create manifests with different timestamps
@@ -95,26 +95,26 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 				recentManifest := s3.Manifest{"recent-file1.txt", "recent-file2.txt"}
 
 				// Store manifests
-				err := mockService.SetManifest(namespace, bucket, oldTimestamp, oldManifest)
+				err := mockService.SetManifest(testNamespace, testBucket, oldTimestamp, oldManifest)anifest)
 				Expect(err).ToNot(HaveOccurred())
-				err = mockService.SetManifest(namespace, bucket, recentTimestamp, recentManifest)
+				err = mockService.SetManifest(testNamespace, testBucket, recentTimestamp, recentManifest)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify both manifests exist
-				_, exists := mockService.GetStoredManifest(namespace, oldTimestamp)
+				_, exists := mockService.GetStoredManifest(testNamespace, oldTimestamp)
 				Expect(exists).To(BeTrue())
-				_, exists = mockService.GetStoredManifest(namespace, recentTimestamp)
+				_, exists = mockService.GetStoredManifest(testNamespace, recentTimestamp)
 				Expect(exists).To(BeTrue())
 
 				// Cleanup with 30-minute timeout
 				timeout := int64(1800) // 30 minutes
-				err = mockService.CleanupCache(namespace, bucket, timeout, 1)
+				err = mockService.CleanupCache(testNamespace, testBucket, timeout, 1)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify old manifest was deleted but recent one remains
-				_, exists = mockService.GetStoredManifest(namespace, oldTimestamp)
+				_, exists = mockService.GetStoredManifest(testNamespace, oldTimestamp)
 				Expect(exists).To(BeFalse()) // Should be deleted
-				_, exists = mockService.GetStoredManifest(namespace, recentTimestamp)
+				_, exists = mockService.GetStoredManifest(testNamespace, recentTimestamp)
 				Expect(exists).To(BeTrue()) // Should remain
 			})
 
@@ -127,26 +127,24 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 			})
 
 			It("should respect minimum asset records constraint", func() {
-				namespace := "testapp"
-				bucket := "test-bucket"
 				timeout := int64(1) // Very short timeout - everything should be old
 
 				// Create multiple old manifests
 				timestamps := []int64{1000, 2000, 3000, 4000}
 				for _, ts := range timestamps {
 					manifest := s3.Manifest{fmt.Sprintf("file-%d.txt", ts)}
-					err := mockService.SetManifest(namespace, bucket, ts, manifest)
+					err := mockService.SetManifest(testNamespace, testBucket, ts, manifest)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// Cleanup with minimum 2 records
-				err := mockService.CleanupCache(namespace, bucket, timeout, 2)
+				err := mockService.CleanupCache(testNamespace, testBucket, timeout, 2)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Count remaining manifests
 				remainingCount := 0
 				for _, ts := range timestamps {
-					if _, exists := mockService.GetStoredManifest(namespace, ts); exists {
+					if _, exists := mockService.GetStoredManifest(testNamespace, ts); exists {
 						remainingCount++
 					}
 				}
@@ -158,23 +156,22 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 
 		Context("Manual deletion", func() {
 			It("should allow manual file deletion", func() {
-				namespace := "testapp"
 				filepath := "temp-file.txt"
 				content := "temporary content"
 
 				// Store a file
-				err := mockService.SetItem(namespace, filepath, "text/plain", "bucket", 123, content)
+				err := mockService.SetItem(testNamespace, filepath, "text/plain", "bucket", 123, content)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify it exists
-				_, exists := mockService.GetStoredItem(namespace, filepath)
+				_, exists := mockService.GetStoredItem(testNamespace, filepath)
 				Expect(exists).To(BeTrue())
 
 				// Delete it manually
-				mockService.DeleteItem(namespace, filepath)
+				mockService.DeleteItem(testNamespace, filepath)
 
 				// Verify it's gone
-				_, exists = mockService.GetStoredItem(namespace, filepath)
+				_, exists = mockService.GetStoredItem(testNamespace, filepath)
 				Expect(exists).To(BeFalse())
 			})
 		})
@@ -183,23 +180,20 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 	Describe("Lifecycle Operations", func() {
 		Context("Complete populate workflow", func() {
 			It("should execute populate workflow operations in correct order", func() {
-				namespace := "testapp"
-				bucket := "test-bucket"
-
 				// Execute populate workflow
-				err := mockService.StartPopulate(namespace, bucket, 123)
+				err := mockService.StartPopulate(testNamespace, testBucket, 123)et, 123)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.SetItem(namespace, "index.html", "text/html", bucket, 123, "<html></html>")
+				err = mockService.SetItem(testNamespace, "index.html", "text/html", testBucket, 123, "<html></html>")/html>")
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.SetManifest(namespace, bucket, 123, s3.Manifest{"index.html"})
+				err = mockService.SetManifest(testNamespace, testBucket, 123, s3.Manifest{"index.html"}).html"})
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.EndPopulate(namespace, bucket, 123)
+				err = mockService.EndPopulate(testNamespace, testBucket, 123)et, 123)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.CleanupCache(namespace, bucket, 3600, 3)
+				err = mockService.CleanupCache(testNamespace, testBucket, 3600, 3)
 				Expect(err).ToNot(HaveOccurred())
 
 				mockService.Close()

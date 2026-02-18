@@ -15,21 +15,28 @@ import (
 // Define manifest type for testing since it's not exported
 type TestManifest []string
 
+type manifestInfo struct {
+	key       string
+	timestamp int64
+}
+
 var _ = Describe("S3 Implementation", func() {
+	var (
+		testNamespace = "frontend"
+		testTimestamp = int64(1234567890)
+	)
+
 	Describe("Path generation functions", func() {
 		Context("makeDataPath", func() {
 			It("should generate correct data path format", func() {
-				namespace := "frontend"
 				filepath := "index.html"
-
-				expectedPath := fmt.Sprintf("data/%s/%s", namespace, filepath)
+				expectedPath := fmt.Sprintf("data/%s/%s", testNamespace, filepath)
 				Expect(expectedPath).To(Equal("data/frontend/index.html"))
 			})
 
 			It("should handle paths with subdirectories", func() {
 				namespace := "app"
 				filepath := "assets/js/main.js"
-
 				expectedPath := fmt.Sprintf("data/%s/%s", namespace, filepath)
 				Expect(expectedPath).To(Equal("data/app/assets/js/main.js"))
 			})
@@ -37,7 +44,6 @@ var _ = Describe("S3 Implementation", func() {
 			It("should handle special characters in filenames", func() {
 				namespace := "myapp"
 				filepath := "file with spaces.txt"
-
 				expectedPath := fmt.Sprintf("data/%s/%s", namespace, filepath)
 				Expect(expectedPath).To(Equal("data/myapp/file with spaces.txt"))
 			})
@@ -45,17 +51,13 @@ var _ = Describe("S3 Implementation", func() {
 
 		Context("makeManifestPath", func() {
 			It("should generate correct manifest path format", func() {
-				namespace := "frontend"
-				timestamp := int64(1234567890)
-
-				expectedPath := fmt.Sprintf("manifests/%s/%d", namespace, timestamp)
+				expectedPath := fmt.Sprintf("manifests/%s/%d", testNamespace, testTimestamp)
 				Expect(expectedPath).To(Equal("manifests/frontend/1234567890"))
 			})
 
 			It("should handle different namespaces", func() {
 				namespace := "my-application"
 				timestamp := int64(9876543210)
-
 				expectedPath := fmt.Sprintf("manifests/%s/%d", namespace, timestamp)
 				Expect(expectedPath).To(Equal("manifests/my-application/9876543210"))
 			})
@@ -66,7 +68,6 @@ var _ = Describe("S3 Implementation", func() {
 		Context("Manifest JSON serialization", func() {
 			It("should serialize empty manifest", func() {
 				manifest := TestManifest{}
-
 				data, err := json.Marshal(manifest)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(data)).To(Equal("[]"))
@@ -74,7 +75,6 @@ var _ = Describe("S3 Implementation", func() {
 
 			It("should serialize manifest with files", func() {
 				manifest := TestManifest{"index.html", "style.css", "app.js"}
-
 				data, err := json.Marshal(manifest)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -92,7 +92,6 @@ var _ = Describe("S3 Implementation", func() {
 					"assets/js/app.js",
 					"images/logo.png",
 				}
-
 				data, err := json.Marshal(manifest)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -108,8 +107,8 @@ var _ = Describe("S3 Implementation", func() {
 	Describe("Cleanup operations", func() {
 		Context("Manifest timestamp parsing", func() {
 			It("should parse timestamp from manifest path", func() {
-				objectKey := "manifests/frontend/1234567890"
-				prefix := "manifests/frontend/"
+				objectKey := fmt.Sprintf("manifests/%s/%d", testNamespace, testTimestamp)
+				prefix := fmt.Sprintf("manifests/%s/", testNamespace)
 
 				timestampString, found := strings.CutPrefix(objectKey, prefix)
 				Expect(found).To(BeTrue())
@@ -121,8 +120,8 @@ var _ = Describe("S3 Implementation", func() {
 			})
 
 			It("should handle invalid timestamp format", func() {
-				objectKey := "manifests/frontend/invalid-timestamp"
-				prefix := "manifests/frontend/"
+				objectKey := fmt.Sprintf("manifests/%s/invalid-timestamp", testNamespace)
+				prefix := fmt.Sprintf("manifests/%s/", testNamespace)
 
 				timestampString, found := strings.CutPrefix(objectKey, prefix)
 				Expect(found).To(BeTrue())
@@ -135,11 +134,6 @@ var _ = Describe("S3 Implementation", func() {
 
 		Context("Manifest sorting", func() {
 			It("should sort manifests by timestamp (newest first)", func() {
-				type manifestInfo struct {
-					key       string
-					timestamp int64
-				}
-
 				manifests := []manifestInfo{
 					{"manifests/app/1000", 1000},
 					{"manifests/app/3000", 3000},
@@ -197,22 +191,26 @@ var _ = Describe("S3 Implementation", func() {
 		})
 
 		Context("Timeout and minimum records logic", func() {
-			It("should respect minimum asset records constraint", func() {
-				type manifestInfo struct {
-					key       string
-					timestamp int64
-				}
+			var (
+				manifests       []manifestInfo
+				minAssetRecords int64
+				timeout         int64
+				currentTime     int64
+			)
 
-				manifests := []manifestInfo{
+			BeforeEach(func() {
+				minAssetRecords = int64(2)
+				timeout = int64(1000)
+				currentTime = int64(5000)
+			})
+
+			It("should respect minimum asset records constraint", func() {
+				manifests = []manifestInfo{
 					{"manifests/app/4000", 4000}, // newest
 					{"manifests/app/3000", 3000},
 					{"manifests/app/2000", 2000},
 					{"manifests/app/1000", 1000}, // oldest
 				}
-
-				minAssetRecords := int64(2)
-				timeout := int64(1000)
-				currentTime := int64(5000) // Current time
 
 				oldManifests := []string{}
 				for i, manifest := range manifests {
@@ -229,21 +227,13 @@ var _ = Describe("S3 Implementation", func() {
 			})
 
 			It("should respect timeout constraint", func() {
-				type manifestInfo struct {
-					key       string
-					timestamp int64
-				}
-
-				manifests := []manifestInfo{
+				minAssetRecords = int64(1) // Override for this test
+				manifests = []manifestInfo{
 					{"manifests/app/4900", 4900}, // Recent, within timeout
 					{"manifests/app/4800", 4800}, // Recent, within timeout
 					{"manifests/app/3000", 3000}, // Old, beyond timeout
 					{"manifests/app/1000", 1000}, // Old, beyond timeout
 				}
-
-				minAssetRecords := int64(1) // Keep only 1
-				timeout := int64(1000)      // 1000 seconds timeout
-				currentTime := int64(5000)  // Current time
 
 				oldManifests := []string{}
 				for i, manifest := range manifests {
@@ -253,9 +243,6 @@ var _ = Describe("S3 Implementation", func() {
 				}
 
 				// Should delete manifests beyond minimum that are also beyond timeout
-				// Index 1: 4800 - within timeout, keep
-				// Index 2: 3000 - beyond timeout, delete
-				// Index 3: 1000 - beyond timeout, delete
 				Expect(len(oldManifests)).To(Equal(2))
 			})
 		})
@@ -263,26 +250,14 @@ var _ = Describe("S3 Implementation", func() {
 
 	Describe("File operations simulation", func() {
 		Context("Content handling", func() {
-			It("should calculate content length correctly", func() {
-				content := "<html><body>Hello World</body></html>"
-				contentLen := len(content)
-
-				Expect(contentLen).To(Equal(37))
-			})
-
-			It("should handle empty content", func() {
-				content := ""
-				contentLen := len(content)
-
-				Expect(contentLen).To(Equal(0))
-			})
-
-			It("should handle binary-like content", func() {
-				content := string([]byte{0x01, 0x02, 0x03, 0x04})
-				contentLen := len(content)
-
-				Expect(contentLen).To(Equal(4))
-			})
+			DescribeTable("should calculate content length correctly",
+				func(content string, expectedLen int) {
+					Expect(len(content)).To(Equal(expectedLen))
+				},
+				Entry("HTML content", "<html><body>Hello World</body></html>", 37),
+				Entry("empty content", "", 0),
+				Entry("binary-like content", string([]byte{0x01, 0x02, 0x03, 0x04}), 4),
+			)
 		})
 	})
 
@@ -290,7 +265,6 @@ var _ = Describe("S3 Implementation", func() {
 		Context("Current time handling", func() {
 			It("should generate valid Unix timestamp", func() {
 				currentTime := time.Now().Unix()
-
 				Expect(currentTime).To(BeNumerically(">", 0))
 
 				// Should be reasonable timestamp (after year 2000)
@@ -317,28 +291,17 @@ var _ = Describe("S3 Implementation", func() {
 
 	Describe("Directory walking simulation", func() {
 		Context("File processing", func() {
-			It("should skip directories", func() {
-				isDir := true
-
-				if isDir {
-					// Should return early for directories
-					Expect(isDir).To(BeTrue())
-				} else {
-					// This should not execute for directories
-					Fail("Should have skipped directory")
-				}
-			})
-
-			It("should process files", func() {
-				isDir := false
-				path := "index.html"
-
-				if !isDir {
-					// Should process files
-					Expect(path).To(Equal("index.html"))
-					Expect(isDir).To(BeFalse())
-				}
-			})
+			DescribeTable("should handle file vs directory correctly",
+				func(isDir bool, shouldProcess bool) {
+					if isDir {
+						Expect(shouldProcess).To(BeFalse())
+					} else {
+						Expect(shouldProcess).To(BeTrue())
+					}
+				},
+				Entry("should skip directories", true, false),
+				Entry("should process files", false, true),
+			)
 		})
 	})
 })

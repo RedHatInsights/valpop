@@ -41,6 +41,7 @@ var populateCmd = &cobra.Command{
 				viper.GetString("prefix"),
 				viper.GetInt64("timeout"),
 				int64(minAssetRecords),
+				viper.GetInt64("cache-max-age"),
 			)
 		} else if viper.GetString("mode") == "s3" {
 			client, err := s3.NewMinio(addr, viper.GetString("username"), viper.GetString("password"))
@@ -56,6 +57,7 @@ var populateCmd = &cobra.Command{
 				viper.GetString("prefix"),
 				viper.GetInt64("timeout"),
 				int64(minAssetRecords),
+				viper.GetInt64("cache-max-age"),
 			)
 		}
 		return nil
@@ -67,9 +69,11 @@ func init() {
 	populateCmd.Flags().StringP("prefix", "r", "", "Prefix for dir structure and cache")
 	populateCmd.Flags().Int64P("timeout", "t", 30, "Timeout for cache")
 	populateCmd.Flags().IntP("min-asset-records", "n", 3, "Minimum number of asset records to keep")
+	populateCmd.Flags().Int64P("cache-max-age", "c", 600, "Cache-Control max-age in seconds for static assets")
 	viper.BindPFlag("source", populateCmd.Flags().Lookup("source"))
 	viper.BindPFlag("prefix", populateCmd.Flags().Lookup("prefix"))
 	viper.BindPFlag("timeout", populateCmd.Flags().Lookup("timeout"))
 	viper.BindPFlag("min-asset-records", populateCmd.Flags().Lookup("min-asset-records"))
+	viper.BindPFlag("cache-max-age", populateCmd.Flags().Lookup("cache-max-age"))
 	rootCmd.AddCommand(populateCmd)
 }

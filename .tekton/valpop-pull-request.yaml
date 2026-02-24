@@ -10,6 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
       == "main"
+    pipelinesascode.tekton.dev/pipeline: https://github.com/RedHatInsights/konflux-pipelines/blob/main/pipelines/docker-build-run-unit-tests-dynamic-env.yaml
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: valpop
@@ -29,18 +30,41 @@ spec:
     value: 5d
   - name: dockerfile
     value: /Dockerfile
+  - name: unit-tests-script
+    value: ./run-unit-tests.sh
+  - name: PGSQL_USER
+    value: ""
+  - name: PGSQL_PASSWORD
+    value: ""
+  - name: PGSQL_HOSTNAME
+    value: ""
+  - name: PGSQL_PORT
+    value: ""
+  - name: PGSQL_DATABASE
+    value: ""
+  - name: UNLEASH_API_TOKEN
+    value: ""
+  - name: UNLEASH_ADMIN_TOKEN
+    value: ""
+  - name: env-vars
+    value: |
+      TEST_BUCKET=test-bucket
+      TEST_NAMESPACE=test-populate
+      MINIO_ENDPOINT=localhost:9000
+      TEST_DIR=build
   pipelineRef:
-    params:
-    - name: url
-      value: https://github.com/RedHatInsights/konflux-pipelines
-    - name: revision
-      value: main
-    - name: pathInRepo
-      value: pipelines/docker-build-oci-ta.yaml
-    resolver: git
+    name: docker-build
   taskRunTemplate:
     serviceAccountName: build-pipeline-valpop
   workspaces:
+  - name: workspace
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'

@@ -6,41 +6,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	impl "github.com/RedHatInsights/valpop/impl"
 	minio "github.com/minio/minio-go/v7"
 	creds "github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type Minio struct {
 	ctx    context.Context
-	client *minio.Client
+	client S3Client
 }
 
+// NewMinio creates a new Minio instance with a real MinIO client
 func NewMinio(addr, username, password string) (Minio, error) {
 	client, err := minio.New(addr, &minio.Options{
 		Creds:  creds.NewStaticV4(username, password, ""),
 		Secure: false, // Change to `true` if using HTTPS
 	})
 	if err != nil {
-		panic(err)
+		return Minio{}, fmt.Errorf("failed to create S3 client: %w", err)
 	}
+	return NewMinioWithClient(client), nil
+}
+
+// NewMinioWithClient creates a new Minio instance with a custom S3Client
+// This allows for dependency injection of mock clients for testing
+func NewMinioWithClient(client S3Client) Minio {
 	return Minio{
 		ctx:    context.Background(),
 		client: client,
-	}, nil
-}
-
-func makeDataPath(namespace, filepath string, _ int64) string {
-	return fmt.Sprintf("data/%s/%s", namespace, filepath)
-}
-func makeManifestPath(namespace string, timestamp int64) string {
-	return fmt.Sprintf("manifests/%s/%d", namespace, timestamp)
+	}
 }
 
 func (m *Minio) Close() {
@@ -55,7 +54,7 @@ func (m *Minio) EndPopulate(namespace, bucket string, timestamp int64) error {
 }
 
 func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timestamp int64, contents string) error {
-	key := makeDataPath(namespace, filepath, timestamp)
+	key := impl.MakeDataKey(namespace, filepath)
 	content_len := len(contents)
 
 	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
@@ -68,7 +67,7 @@ func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timesta
 }
 
 func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Manifest) error {
-	key := makeManifestPath(namespace, timestamp)
+	key := impl.MakeManifestKey(namespace, timestamp)
 
 	fmt.Printf("manifest %s: %d (%d)\n", key, len(files), timestamp)
 	raw, err := json.Marshal(files)
@@ -90,31 +89,18 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 
 	fileSystem := os.DirFS(source)
 	m.StartPopulate(prefix, bucket, currentTime)
-	manifest := Manifest{}
-	err := fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
 
-		if d.IsDir() {
-			return nil
-		}
-
-		fmt.Printf("Finding file: %s\n", path)
-		contents, werr := fs.ReadFile(fileSystem, path)
-		if werr != nil {
-			return werr
-		}
-		manifest = append(manifest, path)
-		contentType := getContentType(path)
-		return m.SetItem(prefix, path, contentType, bucket, currentTime, string(contents))
+	// Use common business logic to walk filesystem and collect files
+	manifest, err := impl.BuildPopulateManifest(fileSystem, func(file impl.FileInfo) error {
+		fmt.Printf("Finding file: %s\n", file.Path)
+		return m.SetItem(prefix, file.Path, file.ContentType, bucket, currentTime, file.Content)
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
 		return err
 	}
 
-	err = m.SetManifest(prefix, bucket, currentTime, manifest)
+	err = m.SetManifest(prefix, bucket, currentTime, Manifest(manifest))
 	if err != nil {
 		return err
 	}
@@ -130,15 +116,9 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error {
 	currentTime := time.Now().Unix()
 	bucketPrefix := "manifests/" + prefix + "/"
-	oldFiles := map[string]bool{}
-	newFiles := map[string]bool{}
 
 	// Collect all manifests with their timestamps
-	type manifestInfo struct {
-		key       string
-		timestamp int64
-	}
-	allManifests := []manifestInfo{}
+	allManifests := []impl.ManifestInfo{}
 
 	for object := range m.client.ListObjects(m.ctx, bucket, minio.ListObjectsOptions{Prefix: bucketPrefix, Recursive: true}) {
 		timestampString, _ := strings.CutPrefix(object.Key, "manifests/"+prefix+"/")
@@ -146,54 +126,29 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecor
 		if err != nil {
 			return fmt.Errorf("could not get timestamp: %w", err)
 		}
-		allManifests = append(allManifests, manifestInfo{
-			key:       object.Key,
-			timestamp: int64(timestamp),
+
+		// Get manifest contents
+		manifestData, err := m.getManifest(object.Key, bucket)
+		if err != nil {
+			return fmt.Errorf("could not get manifest: %w", err)
+		}
+
+		allManifests = append(allManifests, impl.ManifestInfo{
+			Key:       object.Key,
+			Timestamp: int64(timestamp),
+			Files:     manifestData,
 		})
 	}
 
-	// Sort manifests by timestamp (newest first)
-	sort.Slice(allManifests, func(i, j int) bool {
-		return allManifests[i].timestamp > allManifests[j].timestamp
-	})
+	// Use common logic to determine what to delete
+	toDelete, toKeep := impl.SeparateManifests(allManifests, currentTime, timeout, minAssetRecords)
 
-	// Determine which manifests can be deleted
-	oldManifests := []string{}
-	for i, manifest := range allManifests {
-		// Keep at least minAssetRecords manifests regardless of timeout
-		if int64(i) >= minAssetRecords && currentTime-manifest.timestamp > timeout {
-			manifestData, err := m.getManifest(manifest.key, bucket)
-			if err != nil {
-				return fmt.Errorf("could not get manifest: %w", err)
-			}
-
-			for _, file := range manifestData {
-				oldFiles[file] = true
-			}
-			oldManifests = append(oldManifests, manifest.key)
-		} else {
-			// This manifest should be kept
-			manifestData, err := m.getManifest(manifest.key, bucket)
-			if err != nil {
-				return fmt.Errorf("could not get manifest: %w", err)
-			}
-
-			for _, file := range manifestData {
-				newFiles[file] = true
-			}
-		}
-	}
-
-	// Protect files that are still referenced in newer manifests
-	for file := range newFiles {
-		fmt.Printf("Protecting: %s\n", file)
-		delete(oldFiles, file)
-	}
-	delete(oldFiles, "fedmods.json")
+	// Determine which files to delete
+	filesToDelete := impl.DetermineFilesToDelete(toDelete, toKeep, []string{"fedmods.json"})
 
 	// Remove old files
-	for file := range oldFiles {
-		err := m.client.RemoveObject(m.ctx, bucket, makeDataPath(prefix, file, currentTime), minio.RemoveObjectOptions{})
+	for _, file := range filesToDelete {
+		err := m.client.RemoveObject(m.ctx, bucket, impl.MakeDataKey(prefix, file), minio.RemoveObjectOptions{})
 		if err != nil {
 			return fmt.Errorf("unable to remove object: %w", err)
 		}
@@ -201,12 +156,12 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecor
 	}
 
 	// Remove old manifests
-	for _, file := range oldManifests {
-		err := m.client.RemoveObject(m.ctx, bucket, file, minio.RemoveObjectOptions{})
+	for _, manifest := range toDelete {
+		err := m.client.RemoveObject(m.ctx, bucket, manifest.Key, minio.RemoveObjectOptions{})
 		if err != nil {
 			return fmt.Errorf("unable to remove object: %w", err)
 		}
-		fmt.Printf("Removed manifest %s\n", file)
+		fmt.Printf("Removed manifest %s\n", manifest.Key)
 	}
 
 	return nil
@@ -218,37 +173,16 @@ func (m *Minio) getManifest(key, bucket string) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("could not get object: %w", err)
 	}
 
-	manifest := Manifest{}
 	rawData, err := io.ReadAll(obj)
 	if err != nil {
 		return Manifest{}, fmt.Errorf("could not read object: %w", err)
 	}
 
-	err = json.Unmarshal(rawData, &manifest)
+	// Use common business logic to parse manifest
+	files, err := impl.ParseManifest(rawData)
 	if err != nil {
-		return Manifest{}, fmt.Errorf("could not unmarshal object: %w", err)
+		return Manifest{}, err
 	}
-	return manifest, nil
-}
 
-func getContentType(filepath string) string {
-	switch {
-	case strings.HasSuffix(filepath, ".html"):
-		return "text/html; charset=utf-8"
-	case strings.HasSuffix(filepath, ".css"):
-		return "text/css; charset=utf-8"
-	case strings.HasSuffix(filepath, ".js"):
-		return "application/javascript"
-	case strings.HasSuffix(filepath, ".woff2"):
-		return "font/woff2"
-	case strings.HasSuffix(filepath, ".svg"):
-		return "image/svg+xml"
-	case strings.HasSuffix(filepath, ".png"):
-		return "image/png"
-	case strings.HasSuffix(filepath, ".jpeg") || strings.HasSuffix(filepath, ".jpg"):
-		return "image/jpeg"
-	case strings.HasSuffix(filepath, ".json"):
-		return "application/json"
-	}
-	return "application/octet-stream"
+	return Manifest(files), nil
 }

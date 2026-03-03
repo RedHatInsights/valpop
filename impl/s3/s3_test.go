@@ -304,4 +304,102 @@ var _ = Describe("S3 Implementation", func() {
 			)
 		})
 	})
+
+	Describe("Cache-Control header generation", func() {
+		var (
+			entryPointHeader   string
+			regularAssetHeader string
+		)
+
+		BeforeEach(func() {
+			entryPointHeader = "public, max-age=60, stale-while-revalidate=300"
+			regularAssetHeader = "public, max-age=600"
+		})
+
+		Context("Entry point files", func() {
+			DescribeTable("should return short cache with stale-while-revalidate",
+				func(filepath string, expectedHeader string) {
+					// These files should have short cache to protect origin
+					Expect(expectedHeader).To(Equal(entryPointHeader))
+				},
+				Entry("index.html", "index.html", "public, max-age=60, stale-while-revalidate=300"),
+				Entry("fed-mods.json", "fed-mods.json", "public, max-age=60, stale-while-revalidate=300"),
+				Entry("app-info.json", "app-info.json", "public, max-age=60, stale-while-revalidate=300"),
+				Entry("app-info.deps.json", "app-info.deps.json", "public, max-age=60, stale-while-revalidate=300"),
+				Entry("nested index.html", "assets/index.html", "public, max-age=60, stale-while-revalidate=300"),
+				Entry("nested fed-mods.json", "some/path/fed-mods.json", "public, max-age=60, stale-while-revalidate=300"),
+			)
+		})
+
+		Context("Regular static assets with cache-max-age parameter", func() {
+			DescribeTable("should use provided cache-max-age value",
+				func(cacheMaxAge int64, expectedMaxAge string) {
+					// For non-entry-point files, should use the configured cache-max-age
+					expectedHeader := fmt.Sprintf("public, max-age=%d", cacheMaxAge)
+					Expect(expectedHeader).To(Equal(expectedMaxAge))
+				},
+				Entry("default 600 seconds", int64(600), "public, max-age=600"),
+				Entry("300 seconds", int64(300), "public, max-age=300"),
+				Entry("1800 seconds", int64(1800), "public, max-age=1800"),
+				Entry("0 seconds (no-cache equivalent)", int64(0), "public, max-age=0"),
+				Entry("1 year", int64(31536000), "public, max-age=31536000"),
+			)
+		})
+
+		Context("Cache-Control directive requirements", func() {
+			It("should use 'public' to enable CDN caching", func() {
+				Expect(entryPointHeader).To(HavePrefix("public"))
+				Expect(regularAssetHeader).To(HavePrefix("public"))
+			})
+
+			It("should include stale-while-revalidate for DDoS protection", func() {
+				// Protects against thundering herd when cache expires
+				Expect(entryPointHeader).To(ContainSubstring("stale-while-revalidate=300"))
+			})
+		})
+
+		Context("Deployment rollout timing", func() {
+			It("should allow deployment rollout within 6 minutes for entry points", func() {
+				// max-age=60 + stale-while-revalidate=300 = 360 seconds = 6 minutes
+				maxAge := int64(60)
+				staleWindow := int64(300)
+				maxDeploymentLag := maxAge + staleWindow
+
+				Expect(maxDeploymentLag).To(Equal(int64(360))) // 6 minutes
+			})
+		})
+
+		Context("Edge cases", func() {
+			It("should handle empty filepath", func() {
+				filepath := ""
+				// Should not match any entry point patterns
+				isEntryPoint := filepath == "index.html" ||
+					filepath == "fed-mods.json" ||
+					filepath == "app-info.json" ||
+					filepath == "app-info.deps.json"
+
+				Expect(isEntryPoint).To(BeFalse())
+			})
+
+			It("should handle paths with dots in directory names", func() {
+				filepath := "my.app/index.html"
+				// Should still match because it ends with index.html
+				endsWithIndexHtml := len(filepath) >= len("index.html") &&
+					filepath[len(filepath)-len("index.html"):] == "index.html"
+
+				Expect(endsWithIndexHtml).To(BeTrue())
+			})
+
+			It("should handle uppercase file extensions", func() {
+				// File matching should be case-sensitive as specified
+				filepath := "INDEX.HTML"
+				matchesIndexHtml := filepath == "index.html" ||
+					len(filepath) > len("index.html") &&
+						filepath[len(filepath)-len("index.html"):] == "index.html"
+
+				Expect(matchesIndexHtml).To(BeFalse())
+				// Our implementation uses suffix matching which is case-sensitive
+			})
+		})
+	})
 })

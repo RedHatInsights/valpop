@@ -22,3 +22,13 @@ minio-test-upload:
 
 valkey-test-upload:
 	./valpop populate -m valkey -r testapp -s impl --timeout 10 --bucket frontend --hostname 127.0.0.1 --port 6379
+
+# TEST commands
+test:
+	go test ./...
+
+test-verbose:
+	go run github.com/onsi/ginkgo/v2/ginkgo -r -v
+
+test-succinct:
+	go run github.com/onsi/ginkgo/v2/ginkgo -r --succinct

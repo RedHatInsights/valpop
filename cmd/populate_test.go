@@ -21,10 +21,10 @@ var _ = Describe("Populate Command", func() {
 		})
 
 		Context("cache-max-age flag", func() {
-			It("should have default value of 600 seconds", func() {
+			It("should have default value of 86400 seconds (1 day)", func() {
 				flag := populateCmd.Flags().Lookup("cache-max-age")
 				Expect(flag).NotTo(BeNil())
-				Expect(flag.DefValue).To(Equal("600"))
+				Expect(flag.DefValue).To(Equal("86400"))
 			})
 
 			DescribeTable("should accept various cache-max-age values",

@@ -69,7 +69,7 @@ func init() {
 	populateCmd.Flags().StringP("prefix", "r", "", "Prefix for dir structure and cache")
 	populateCmd.Flags().Int64P("timeout", "t", 30, "Timeout for cache")
 	populateCmd.Flags().IntP("min-asset-records", "n", 3, "Minimum number of asset records to keep")
-	populateCmd.Flags().Int64P("cache-max-age", "c", 600, "Cache-Control max-age in seconds for static assets")
+	populateCmd.Flags().Int64P("cache-max-age", "c", 86400, "Cache-Control max-age in seconds for static assets")
 	viper.BindPFlag("source", populateCmd.Flags().Lookup("source"))
 	viper.BindPFlag("prefix", populateCmd.Flags().Lookup("prefix"))
 	viper.BindPFlag("timeout", populateCmd.Flags().Lookup("timeout"))

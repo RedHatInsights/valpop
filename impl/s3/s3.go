@@ -53,13 +53,17 @@ func (m *Minio) EndPopulate(namespace, bucket string, timestamp int64) error {
 	return nil
 }
 
-func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timestamp int64, contents string) error {
+func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timestamp int64, contents string, cacheMaxAge int64) error {
 	key := impl.MakeDataKey(namespace, filepath)
 	content_len := len(contents)
 
 	fmt.Printf("Uploading: %s: %s (%d)\n", filepath, key, content_len)
 
-	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{ContentType: contentType})
+	cacheControl := getCacheControl(filepath, cacheMaxAge)
+	_, err := m.client.PutObject(m.ctx, bucket, key, bytes.NewReader([]byte(contents)), int64(content_len), minio.PutObjectOptions{
+		ContentType:  contentType,
+		CacheControl: cacheControl,
+	})
 	if err != nil {
 		return fmt.Errorf("err from s3:%w", err)
 	}
@@ -84,7 +88,7 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Man
 
 type Manifest []string
 
-func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error {
+func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	currentTime := time.Now().Unix()
 
 	fileSystem := os.DirFS(source)
@@ -93,7 +97,7 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 	// Use common business logic to walk filesystem and collect files
 	manifest, err := impl.BuildPopulateManifest(fileSystem, func(file impl.FileInfo) error {
 		fmt.Printf("Finding file: %s\n", file.Path)
-		return m.SetItem(prefix, file.Path, file.ContentType, bucket, currentTime, file.Content)
+		return m.SetItem(prefix, file.Path, file.ContentType, bucket, currentTime, file.Content, cacheMaxAge)
 	})
 	if err != nil {
 		fmt.Printf("%v", err)
@@ -144,7 +148,7 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecor
 	toDelete, toKeep := impl.SeparateManifests(allManifests, currentTime, timeout, minAssetRecords)
 
 	// Determine which files to delete
-	filesToDelete := impl.DetermineFilesToDelete(toDelete, toKeep, []string{"fedmods.json"})
+	filesToDelete := impl.DetermineFilesToDelete(toDelete, toKeep, []string{"fed-mods.json"})
 
 	// Remove old files
 	for _, file := range filesToDelete {
@@ -165,6 +169,21 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecor
 	}
 
 	return nil
+}
+
+func getCacheControl(filepath string, cacheMaxAge int64) string {
+	// Short cache to protect origin
+	// Adding stale-while-revalidate allows CDN to serve the stale file (up to the specified seconds) while new file is fetched in the background
+	// Requests after max-age and stale-while-revalidate will be treated as a cache miss
+	if strings.HasSuffix(filepath, "index.html") ||
+		strings.HasSuffix(filepath, "fed-mods.json") ||
+		strings.HasSuffix(filepath, "app-info.json") ||
+		strings.HasSuffix(filepath, "app-info.deps.json") {
+		return "public, max-age=60, stale-while-revalidate=300"
+	}
+
+	// All other assets use the configured (or default) cache max-age value
+	return fmt.Sprintf("public, max-age=%d", cacheMaxAge)
 }
 
 func (m *Minio) getManifest(key, bucket string) (Manifest, error) {

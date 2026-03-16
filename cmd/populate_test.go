@@ -40,10 +40,20 @@ var _ = Describe("Populate Command", func() {
 				Entry("large value (1 year)", "31536000", int64(31536000)),
 			)
 
-			It("should have short flag -c", func() {
-				flag := populateCmd.Flags().ShorthandLookup("c")
+			It("should have short flag -g", func() {
+				flag := populateCmd.Flags().ShorthandLookup("g")
 				Expect(flag).NotTo(BeNil())
 				Expect(flag.Name).To(Equal("cache-max-age"))
+			})
+
+			It("should not conflict with root password shorthand", func() {
+				passwordFlag := rootCmd.PersistentFlags().ShorthandLookup("c")
+				cacheMaxAgeFlag := populateCmd.Flags().ShorthandLookup("g")
+
+				Expect(passwordFlag).NotTo(BeNil())
+				Expect(passwordFlag.Name).To(Equal("password"))
+				Expect(cacheMaxAgeFlag).NotTo(BeNil())
+				Expect(cacheMaxAgeFlag.Name).To(Equal("cache-max-age"))
 			})
 
 			It("should have correct usage description", func() {

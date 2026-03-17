@@ -69,7 +69,7 @@ valpop populate [flags]
 ```
   -s, --source string           Source directory (required)
   -r, --prefix string           Prefix for dir structure and cache (required)
-  -i, --image string            Image identifier, e.g., container image tag (required)
+  -i, --image string            Image identifier, e.g., container image tag
   -t, --timeout int             Timeout for cache cleanup in seconds (default 30)
   -n, --min-asset-records int   Minimum number of asset records to keep (default 3)
   -g, --cache-max-age int       Cache-Control max-age in seconds for static assets (default 86400)

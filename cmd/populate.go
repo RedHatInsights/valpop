@@ -21,9 +21,6 @@ var populateCmd = &cobra.Command{
 		if viper.GetString("prefix") == "" {
 			return fmt.Errorf("no prefix arg set")
 		}
-		if viper.GetString("image") == "" {
-			return fmt.Errorf("no image arg set")
-		}
 
 		minAssetRecords := viper.GetInt("min-asset-records")
 		if minAssetRecords < 0 {

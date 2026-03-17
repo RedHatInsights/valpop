@@ -85,16 +85,6 @@ var _ = Describe("Populate Command", func() {
 				Expect(err.Error()).To(ContainSubstring("no prefix arg set"))
 			})
 
-			It("should require image flag", func() {
-				viper.Set("source", "/tmp/test")
-				viper.Set("prefix", "test")
-				viper.Set("image", "")
-
-				err := populateCmd.RunE(populateCmd, []string{})
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("no image arg set"))
-			})
-
 			It("should validate min-asset-records is non-negative", func() {
 				viper.Set("source", "/tmp/test")
 				viper.Set("prefix", "test")

@@ -2,7 +2,6 @@ package mock
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -166,19 +165,10 @@ func (m *S3Service) CleanupCache(prefix, bucket string, timeout int64, minAssetR
 		if strings.HasPrefix(key, fmt.Sprintf("manifests/%s/", prefix)) {
 			timestampStr := strings.TrimPrefix(key, fmt.Sprintf("manifests/%s/", prefix))
 			if timestamp, err := strconv.ParseInt(timestampStr, 10, 64); err == nil {
-				// Marshal manifest to JSON and parse using common business logic
-				rawData, err := json.Marshal(manifest)
-				if err != nil {
-					continue
-				}
-				manifestData, err := impl.ParseManifest(rawData)
-				if err != nil {
-					continue
-				}
 				allManifests = append(allManifests, impl.ManifestInfo{
 					Key:       key,
 					Timestamp: timestamp,
-					Files:     manifestData.Files,
+					Files:     manifest.Files,
 				})
 			}
 		}

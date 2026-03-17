@@ -201,8 +201,8 @@ func getCacheControl(filepath string, cacheMaxAge int64) string {
 func (m *Minio) getLatestManifest(prefix, bucket string) (impl.Manifest, error) {
 	bucketPrefix := "manifests/" + prefix + "/"
 
-	var latestManifest impl.Manifest
-	var latestTimestamp int64 = 0
+	var latestKey string
+	var latestTimestamp int64
 
 	for object := range m.client.ListObjects(m.ctx, bucket, minio.ListObjectsOptions{Prefix: bucketPrefix, Recursive: true}) {
 		timestampString, _ := strings.CutPrefix(object.Key, "manifests/"+prefix+"/")
@@ -212,12 +212,8 @@ func (m *Minio) getLatestManifest(prefix, bucket string) (impl.Manifest, error) 
 		}
 
 		if int64(timestamp) > latestTimestamp {
-			manifest, err := m.getManifest(object.Key, bucket)
-			if err != nil {
-				continue
-			}
-			latestManifest = manifest
 			latestTimestamp = int64(timestamp)
+			latestKey = object.Key
 		}
 	}
 
@@ -225,7 +221,7 @@ func (m *Minio) getLatestManifest(prefix, bucket string) (impl.Manifest, error) 
 		return impl.Manifest{}, fmt.Errorf("no manifests found")
 	}
 
-	return latestManifest, nil
+	return m.getManifest(latestKey, bucket)
 }
 
 func (m *Minio) getManifest(key, bucket string) (impl.Manifest, error) {

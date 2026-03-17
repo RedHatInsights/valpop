@@ -70,11 +70,11 @@ func (m *Minio) SetItem(namespace, filepath, contentType, bucket string, timesta
 	return nil
 }
 
-func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Manifest) error {
+func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, manifest impl.Manifest) error {
 	key := impl.MakeManifestKey(namespace, timestamp)
 
-	fmt.Printf("manifest %s: %d (%d)\n", key, len(files), timestamp)
-	raw, err := json.Marshal(files)
+	fmt.Printf("manifest %s: %d files, image: %s, timestamp: %d\n", key, len(manifest.Files), manifest.Image, manifest.Timestamp)
+	raw, err := json.Marshal(manifest)
 	if err != nil {
 		return fmt.Errorf("could not encode manifest:%w", err)
 	}
@@ -86,16 +86,22 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, files Man
 	return nil
 }
 
-type Manifest []string
 
-func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
+func (m *Minio) PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	currentTime := time.Now().Unix()
+
+	// Check if latest manifest has the same image to avoid duplicate uploads
+	latestManifest, err := m.getLatestManifest(prefix, bucket)
+	if err == nil && latestManifest.Image != "" && latestManifest.Image == image {
+		fmt.Printf("Skipping upload: image %s already exists in latest manifest\n", image)
+		return nil
+	}
 
 	fileSystem := os.DirFS(source)
 	m.StartPopulate(prefix, bucket, currentTime)
 
 	// Use common business logic to walk filesystem and collect files
-	manifest, err := impl.BuildPopulateManifest(fileSystem, func(file impl.FileInfo) error {
+	fileList, err := impl.BuildPopulateManifest(fileSystem, func(file impl.FileInfo) error {
 		fmt.Printf("Finding file: %s\n", file.Path)
 		return m.SetItem(prefix, file.Path, file.ContentType, bucket, currentTime, file.Content, cacheMaxAge)
 	})
@@ -104,7 +110,13 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix string, timeout int64, m
 		return err
 	}
 
-	err = m.SetManifest(prefix, bucket, currentTime, Manifest(manifest))
+	manifest := impl.Manifest{
+		Files:     fileList,
+		Image:     image,
+		Timestamp: currentTime,
+	}
+
+	err = m.SetManifest(prefix, bucket, currentTime, manifest)
 	if err != nil {
 		return err
 	}
@@ -140,7 +152,7 @@ func (m *Minio) CleanupCache(prefix, bucket string, timeout int64, minAssetRecor
 		allManifests = append(allManifests, impl.ManifestInfo{
 			Key:       object.Key,
 			Timestamp: int64(timestamp),
-			Files:     manifestData,
+			Files:     manifestData.Files,
 		})
 	}
 
@@ -186,22 +198,52 @@ func getCacheControl(filepath string, cacheMaxAge int64) string {
 	return fmt.Sprintf("public, max-age=%d", cacheMaxAge)
 }
 
-func (m *Minio) getManifest(key, bucket string) (Manifest, error) {
+func (m *Minio) getLatestManifest(prefix, bucket string) (impl.Manifest, error) {
+	bucketPrefix := "manifests/" + prefix + "/"
+
+	var latestManifest impl.Manifest
+	var latestTimestamp int64 = 0
+
+	for object := range m.client.ListObjects(m.ctx, bucket, minio.ListObjectsOptions{Prefix: bucketPrefix, Recursive: true}) {
+		timestampString, _ := strings.CutPrefix(object.Key, "manifests/"+prefix+"/")
+		timestamp, err := strconv.Atoi(timestampString)
+		if err != nil {
+			continue
+		}
+
+		if int64(timestamp) > latestTimestamp {
+			manifest, err := m.getManifest(object.Key, bucket)
+			if err != nil {
+				continue
+			}
+			latestManifest = manifest
+			latestTimestamp = int64(timestamp)
+		}
+	}
+
+	if latestTimestamp == 0 {
+		return impl.Manifest{}, fmt.Errorf("no manifests found")
+	}
+
+	return latestManifest, nil
+}
+
+func (m *Minio) getManifest(key, bucket string) (impl.Manifest, error) {
 	obj, err := m.client.GetObject(m.ctx, bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return Manifest{}, fmt.Errorf("could not get object: %w", err)
+		return impl.Manifest{}, fmt.Errorf("could not get object: %w", err)
 	}
 
 	rawData, err := io.ReadAll(obj)
 	if err != nil {
-		return Manifest{}, fmt.Errorf("could not read object: %w", err)
+		return impl.Manifest{}, fmt.Errorf("could not read object: %w", err)
 	}
 
 	// Use common business logic to parse manifest
-	files, err := impl.ParseManifest(rawData)
+	manifestData, err := impl.ParseManifest(rawData)
 	if err != nil {
-		return Manifest{}, err
+		return impl.Manifest{}, err
 	}
 
-	return Manifest(files), nil
+	return manifestData, nil
 }

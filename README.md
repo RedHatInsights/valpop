@@ -69,20 +69,26 @@ valpop populate [flags]
 ```
   -s, --source string           Source directory (required)
   -r, --prefix string           Prefix for dir structure and cache (required)
+  -i, --image string            Image identifier, e.g., container image tag (required)
   -t, --timeout int             Timeout for cache cleanup in seconds (default 30)
   -n, --min-asset-records int   Minimum number of asset records to keep (default 3)
+  -g, --cache-max-age int       Cache-Control max-age in seconds for static assets (default 86400)
 ```
 
 **Examples:**
 ```bash
 # Basic usage with default minimum asset records (3)
-valpop populate --source /path/to/assets --prefix myapp --timeout 60
+valpop populate --source /path/to/assets --prefix myapp --image myapp:v1.2.3 --timeout 60
 
 # Keep at least 5 versions of each asset, even if they exceed timeout
-valpop populate --source /path/to/assets --prefix myapp --timeout 60 --min-asset-records 5
+valpop populate --source /path/to/assets --prefix myapp --image myapp:v1.2.3 --timeout 60 --min-asset-records 5
 
 # Using short flags
-valpop populate -s /path/to/assets -r myapp -t 60 -n 5
+valpop populate -s /path/to/assets -r myapp -i myapp:v1.2.3 -t 60 -n 5
+
+# If the same image is uploaded again, it will be skipped automatically
+valpop populate -s /path/to/assets -r myapp -i myapp:v1.2.3 -t 60
+# Output: Skipping upload: image myapp:v1.2.3 already exists in latest manifest
 ```
 
 ### pop
@@ -127,11 +133,38 @@ The cleanup process follows this priority:
 ### Examples
 ```bash
 # Scenario 1: Only keep 1 version, clean up after 5 minutes
-valpop populate -s ./assets -r myapp -t 300 -n 1
+valpop populate -s ./assets -r myapp -i myapp:v1 -t 300 -n 1
 
 # Scenario 2: Keep 10 versions, clean up after 24 hours
-valpop populate -s ./assets -r myapp -t 86400 -n 10
+valpop populate -s ./assets -r myapp -i myapp:v2 -t 86400 -n 10
 ```
+
+## Manifest Structure
+
+Manifests are stored with the following structure:
+```json
+{
+  "files": ["index.html", "app.js", "style.css"],
+  "image": "myapp:v1.2.3",
+  "timestamp": 1742472000
+}
+```
+
+This structure allows Valpop to:
+- Track which files belong to each deployment
+- Identify the container image that was deployed
+- Prevent duplicate uploads of the same build
+
+## Duplicate Prevention
+
+When running `populate`, Valpop automatically checks if the specified image has already been uploaded. If the latest manifest contains the same image identifier, the upload is skipped:
+
+```bash
+valpop populate -s ./dist -r myapp -i myapp:abc123
+# Output: Skipping upload: image myapp:abc123 already exists in latest manifest
+```
+
+This prevents unnecessary uploads when the same container image is deployed multiple times (e.g., during rollouts or scaling events).
 
 ### Environment Variables
 All flags can also be set using environment variables with the `VALPOP_` prefix:
@@ -144,8 +177,10 @@ All flags can also be set using environment variables with the `VALPOP_` prefix:
 - `VALPOP_BUCKET` - S3 bucket name
 - `VALPOP_SOURCE` - Source directory
 - `VALPOP_PREFIX` - Prefix for cache keys
+- `VALPOP_IMAGE` - Image identifier (e.g., container image tag)
 - `VALPOP_TIMEOUT` - Cache timeout in seconds
 - `VALPOP_MIN_ASSET_RECORDS` - Minimum number of asset records to keep
+- `VALPOP_CACHE_MAX_AGE` - Cache-Control max-age in seconds for static assets
 - `VALPOP_DEST` - Destination directory
 
 # Building with Podman

@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/RedHatInsights/valpop/impl"
 	"github.com/RedHatInsights/valpop/impl/mock"
-	"github.com/RedHatInsights/valpop/impl/s3"
 )
 
 var _ = Describe("S3 Integration Tests", func() {
@@ -49,9 +49,14 @@ var _ = Describe("S3 Integration Tests", func() {
 				}
 
 				// Create and store manifest
-				manifest := s3.Manifest{}
+				manifestFiles := []string{}
 				for filepath := range assets {
-					manifest = append(manifest, filepath)
+					manifestFiles = append(manifestFiles, filepath)
+				}
+				manifest := impl.Manifest{
+					Files:     manifestFiles,
+					Image:     "test-image:v1",
+					Timestamp: timestamp,
 				}
 				err = mockService.SetManifest(namespace, bucket, timestamp, manifest)
 				Expect(err).ToNot(HaveOccurred())
@@ -70,7 +75,7 @@ var _ = Describe("S3 Integration Tests", func() {
 				// Verify manifest was stored
 				storedManifest, exists := mockService.GetStoredManifest(namespace, timestamp)
 				Expect(exists).To(BeTrue())
-				Expect(len(storedManifest)).To(Equal(len(assets)))
+				Expect(len(storedManifest.Files)).To(Equal(len(assets)))
 
 				// Verify all expected operations were performed
 				expectedOps := []string{"StartPopulate"}
@@ -103,7 +108,11 @@ var _ = Describe("S3 Integration Tests", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				v1Manifest := s3.Manifest{"index.html", "app.js"}
+				v1Manifest := impl.Manifest{
+					Files:     []string{"index.html", "app.js"},
+					Image:     "test-image:v1.0",
+					Timestamp: v1Timestamp,
+				}
 				err := mockService.SetManifest(namespace, bucket, v1Timestamp, v1Manifest)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -120,7 +129,11 @@ var _ = Describe("S3 Integration Tests", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				v2Manifest := s3.Manifest{"index.html", "app.js", "new-feature.js"}
+				v2Manifest := impl.Manifest{
+					Files:     []string{"index.html", "app.js", "new-feature.js"},
+					Image:     "test-image:v2.0",
+					Timestamp: v2Timestamp,
+				}
 				err = mockService.SetManifest(namespace, bucket, v2Timestamp, v2Manifest)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -138,7 +151,11 @@ var _ = Describe("S3 Integration Tests", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				v3Manifest := s3.Manifest{"index.html", "app.js", "new-feature.js", "another-feature.js"}
+				v3Manifest := impl.Manifest{
+					Files:     []string{"index.html", "app.js", "new-feature.js", "another-feature.js"},
+					Image:     "test-image:v3.0",
+					Timestamp: v3Timestamp,
+				}
 				err = mockService.SetManifest(namespace, bucket, v3Timestamp, v3Manifest)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -213,7 +230,11 @@ var _ = Describe("S3 Integration Tests", func() {
 				mockService.Errors["SetManifest"] = fmt.Errorf("manifest service unavailable")
 
 				// Attempt to store manifest - should fail
-				manifest := s3.Manifest{"index.html"}
+				manifest := impl.Manifest{
+					Files:     []string{"index.html"},
+					Image:     "test-image:fail",
+					Timestamp: timestamp,
+				}
 				err = mockService.SetManifest(namespace, bucket, timestamp, manifest)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("manifest service unavailable"))
@@ -231,7 +252,11 @@ var _ = Describe("S3 Integration Tests", func() {
 
 				// Store some test data
 				timestamp := time.Now().Unix() - 7200 // 2 hours ago
-				err := mockService.SetManifest(namespace, bucket, timestamp, s3.Manifest{"old-file.txt"})
+				err := mockService.SetManifest(namespace, bucket, timestamp, impl.Manifest{
+					Files:     []string{"old-file.txt"},
+					Image:     "test-image:old",
+					Timestamp: timestamp,
+				})
 				Expect(err).ToNot(HaveOccurred())
 
 				// Simulate cleanup failure
@@ -284,9 +309,14 @@ var _ = Describe("S3 Integration Tests", func() {
 				}
 
 				// Create manifest
-				manifest := s3.Manifest{}
+				manifestFiles := []string{}
 				for filepath := range files {
-					manifest = append(manifest, filepath)
+					manifestFiles = append(manifestFiles, filepath)
+				}
+				manifest := impl.Manifest{
+					Files:     manifestFiles,
+					Image:     "test-image:large",
+					Timestamp: timestamp,
 				}
 				err = mockService.SetManifest(namespace, bucket, timestamp, manifest)
 				Expect(err).ToNot(HaveOccurred())
@@ -306,7 +336,7 @@ var _ = Describe("S3 Integration Tests", func() {
 				// Verify manifest contains all files
 				storedManifest, exists := mockService.GetStoredManifest(namespace, timestamp)
 				Expect(exists).To(BeTrue())
-				Expect(len(storedManifest)).To(Equal(len(files)))
+				Expect(len(storedManifest.Files)).To(Equal(len(files)))
 
 				// Performance should be reasonable (mocked operations should be fast)
 				Expect(deploymentTime).To(BeNumerically("<", time.Second))

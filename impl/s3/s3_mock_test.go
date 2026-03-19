@@ -7,8 +7,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/RedHatInsights/valpop/impl"
 	"github.com/RedHatInsights/valpop/impl/mock"
-	"github.com/RedHatInsights/valpop/impl/s3"
 )
 
 var _ = Describe("S3 Implementation with Mocks", func() {
@@ -36,7 +36,11 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 
 		Context("SetManifest", func() {
 			It("should store manifests correctly", func() {
-				manifest := s3.Manifest{"index.html", "style.css", "app.js"}
+				manifest := impl.Manifest{
+					Files:     []string{"index.html", "style.css", "app.js"},
+					Image:     "test-image:v1",
+					Timestamp: testTimestamp,
+				}
 
 				err := mockService.SetManifest(testNamespace, testBucket, testTimestamp, manifest)
 				Expect(err).ToNot(HaveOccurred())
@@ -53,17 +57,21 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 			It("should handle SetManifest errors", func() {
 				mockService.Errors["SetManifest"] = fmt.Errorf("manifest storage error")
 
-				err := mockService.SetManifest("ns", "bucket", 123, s3.Manifest{"file.txt"})
+				err := mockService.SetManifest("ns", "bucket", 123, impl.Manifest{
+					Files:     []string{"file.txt"},
+					Image:     "test-image:error",
+					Timestamp: 123,
+				})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("manifest storage error"))
 			})
 
 			It("should store multiple manifests with different timestamps", func() {
 				namespace := "app"
-				manifests := map[int64]s3.Manifest{
-					1000: {"file1.txt", "file2.txt"},
-					2000: {"file1.txt", "file2.txt", "file3.txt"},
-					3000: {"file1.txt", "file3.txt"},
+				manifests := map[int64]impl.Manifest{
+					1000: {Files: []string{"file1.txt", "file2.txt"}, Image: "test-image:1000", Timestamp: 1000},
+					2000: {Files: []string{"file1.txt", "file2.txt", "file3.txt"}, Image: "test-image:2000", Timestamp: 2000},
+					3000: {Files: []string{"file1.txt", "file3.txt"}, Image: "test-image:3000", Timestamp: 3000},
 				}
 
 				// Store all manifests
@@ -91,8 +99,16 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 				oldTimestamp := currentTime - 3600   // 1 hour ago
 				recentTimestamp := currentTime - 300 // 5 minutes ago
 
-				oldManifest := s3.Manifest{"old-file1.txt", "old-file2.txt"}
-				recentManifest := s3.Manifest{"recent-file1.txt", "recent-file2.txt"}
+				oldManifest := impl.Manifest{
+					Files:     []string{"old-file1.txt", "old-file2.txt"},
+					Image:     "test-image:old",
+					Timestamp: oldTimestamp,
+				}
+				recentManifest := impl.Manifest{
+					Files:     []string{"recent-file1.txt", "recent-file2.txt"},
+					Image:     "test-image:recent",
+					Timestamp: recentTimestamp,
+				}
 
 				// Store manifests
 				err := mockService.SetManifest(testNamespace, testBucket, oldTimestamp, oldManifest)
@@ -132,7 +148,11 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 				// Create multiple old manifests
 				timestamps := []int64{1000, 2000, 3000, 4000}
 				for _, ts := range timestamps {
-					manifest := s3.Manifest{fmt.Sprintf("file-%d.txt", ts)}
+					manifest := impl.Manifest{
+						Files:     []string{fmt.Sprintf("file-%d.txt", ts)},
+						Image:     fmt.Sprintf("test-image:%d", ts),
+						Timestamp: ts,
+					}
 					err := mockService.SetManifest(testNamespace, testBucket, ts, manifest)
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -187,7 +207,11 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 				err = mockService.SetItem(testNamespace, "index.html", "text/html", testBucket, 123, "<html></html>")
 				Expect(err).ToNot(HaveOccurred())
 
-				err = mockService.SetManifest(testNamespace, testBucket, 123, s3.Manifest{"index.html"})
+				err = mockService.SetManifest(testNamespace, testBucket, 123, impl.Manifest{
+					Files:     []string{"index.html"},
+					Image:     "test-image:v1",
+					Timestamp: 123,
+				})
 				Expect(err).ToNot(HaveOccurred())
 
 				err = mockService.EndPopulate(testNamespace, testBucket, 123)
@@ -204,7 +228,7 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 			})
 
 			It("should handle populate function call", func() {
-				err := mockService.PopulateFn("addr", "bucket", "source", "prefix", 3600, 3)
+				err := mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", 3600, 3, 86400)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mockService.Operations).To(ContainElement("PopulateFn"))
 			})
@@ -222,13 +246,17 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 
 				// Test SetManifest error
 				mockService.Errors["SetManifest"] = fmt.Errorf("network error")
-				err = mockService.SetManifest("ns", "bucket", 123, s3.Manifest{"file.txt"})
+				err = mockService.SetManifest("ns", "bucket", 123, impl.Manifest{
+					Files:     []string{"file.txt"},
+					Image:     "test-image:error",
+					Timestamp: 123,
+				})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("network error"))
 
 				// Test PopulateFn error
 				mockService.Errors["PopulateFn"] = fmt.Errorf("source directory not found")
-				err = mockService.PopulateFn("addr", "bucket", "source", "prefix", 3600, 3)
+				err = mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", 3600, 3, 86400)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("source directory not found"))
 			})

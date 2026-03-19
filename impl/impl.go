@@ -200,13 +200,40 @@ func BuildPopulateManifest(fileSystem fs.FS, callback func(FileInfo) error) ([]s
 	return manifest, err
 }
 
+// Manifest represents the structure of a manifest
+type Manifest struct {
+	Files     []string `json:"files"`
+	Image     string   `json:"image"`
+	Timestamp int64    `json:"timestamp"`
+}
+
 // ParseManifest unmarshals a manifest from JSON bytes
-// Returns the list of files in the manifest
-func ParseManifest(rawData []byte) ([]string, error) {
-	var manifest []string
-	err := json.Unmarshal(rawData, &manifest)
-	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal manifest: %w", err)
+// Returns the manifest data, handling both old (array) and new (object) formats
+func ParseManifest(rawData []byte) (Manifest, error) {
+	// Trim whitespace to check format
+	trimmed := strings.TrimSpace(string(rawData))
+
+	// Check if it's the new object format (starts with '{')
+	if strings.HasPrefix(trimmed, "{") {
+		var manifest Manifest
+		err := json.Unmarshal(rawData, &manifest)
+		if err != nil {
+			return Manifest{}, fmt.Errorf("could not unmarshal manifest: %w", err)
+		}
+		return manifest, nil
 	}
-	return manifest, nil
+
+	// Fall back to old format (array of files, starts with '[')
+	var files []string
+	err := json.Unmarshal(rawData, &files)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("could not unmarshal manifest: %w", err)
+	}
+
+	// Convert old format to new format
+	return Manifest{
+		Files:     files,
+		Image:     "",
+		Timestamp: 0,
+	}, nil
 }

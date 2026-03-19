@@ -809,22 +809,44 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 		})
 
 		Context("ParseManifest", func() {
-			It("should parse valid JSON manifest", func() {
+			It("should parse old format manifest (array)", func() {
 				jsonData := []byte(`["file1.txt", "file2.js", "dir/file3.html"]`)
 
 				manifest, err := impl.ParseManifest(jsonData)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(manifest).To(Equal([]string{"file1.txt", "file2.js", "dir/file3.html"}))
+				Expect(manifest.Files).To(Equal([]string{"file1.txt", "file2.js", "dir/file3.html"}))
+				Expect(manifest.Image).To(Equal(""))
+				Expect(manifest.Timestamp).To(Equal(int64(0)))
 			})
 
-			It("should handle empty manifest", func() {
+			It("should parse new format manifest (object)", func() {
+				jsonData := []byte(`{"files": ["file1.txt", "file2.js"], "image": "myapp:v1.2.3", "timestamp": 1742472000}`)
+
+				manifest, err := impl.ParseManifest(jsonData)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(manifest.Files).To(Equal([]string{"file1.txt", "file2.js"}))
+				Expect(manifest.Image).To(Equal("myapp:v1.2.3"))
+				Expect(manifest.Timestamp).To(Equal(int64(1742472000)))
+			})
+
+			It("should handle empty manifest (old format)", func() {
 				jsonData := []byte(`[]`)
 
 				manifest, err := impl.ParseManifest(jsonData)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(len(manifest)).To(Equal(0))
+				Expect(len(manifest.Files)).To(Equal(0))
+			})
+
+			It("should handle empty manifest (new format)", func() {
+				jsonData := []byte(`{"files": [], "image": "", "timestamp": 0}`)
+
+				manifest, err := impl.ParseManifest(jsonData)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(manifest.Files)).To(Equal(0))
 			})
 
 			It("should return error for invalid JSON", func() {
@@ -833,24 +855,25 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 				manifest, err := impl.ParseManifest(jsonData)
 
 				Expect(err).To(HaveOccurred())
-				Expect(manifest).To(BeNil())
+				Expect(manifest.Files).To(BeNil())
 			})
 
-			It("should return error for non-array JSON", func() {
-				jsonData := []byte(`{"files": ["file1.txt"]}`)
-
-				_, err := impl.ParseManifest(jsonData)
-
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should handle manifest with special characters in filenames", func() {
+			It("should handle manifest with special characters in filenames (old format)", func() {
 				jsonData := []byte(`["file with spaces.txt", "file-with-dashes.js", "file_underscore.html"]`)
 
 				manifest, err := impl.ParseManifest(jsonData)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(manifest).To(ConsistOf("file with spaces.txt", "file-with-dashes.js", "file_underscore.html"))
+				Expect(manifest.Files).To(ConsistOf("file with spaces.txt", "file-with-dashes.js", "file_underscore.html"))
+			})
+
+			It("should handle manifest with special characters in filenames (new format)", func() {
+				jsonData := []byte(`{"files": ["file with spaces.txt", "file-with-dashes.js"], "image": "test:v1", "timestamp": 123}`)
+
+				manifest, err := impl.ParseManifest(jsonData)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(manifest.Files).To(ConsistOf("file with spaces.txt", "file-with-dashes.js"))
 			})
 		})
 	})

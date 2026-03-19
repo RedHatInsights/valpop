@@ -21,8 +21,8 @@ type S3Service interface {
 	impl.Implementation
 
 	// S3-specific operations
-	SetManifest(namespace, bucket string, timestamp int64, files Manifest) error
-	PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error
+	SetManifest(namespace, bucket string, timestamp int64, files impl.Manifest) error
+	PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error
 	CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error
 }
 

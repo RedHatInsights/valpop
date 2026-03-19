@@ -67,6 +67,7 @@ var _ = Describe("Populate Command", func() {
 		Context("required flag validation", func() {
 			It("should require source flag", func() {
 				viper.Set("prefix", "test")
+				viper.Set("image", "test-image:v1")
 				viper.Set("source", "")
 
 				err := populateCmd.RunE(populateCmd, []string{})
@@ -76,6 +77,7 @@ var _ = Describe("Populate Command", func() {
 
 			It("should require prefix flag", func() {
 				viper.Set("source", "/tmp/test")
+				viper.Set("image", "test-image:v1")
 				viper.Set("prefix", "")
 
 				err := populateCmd.RunE(populateCmd, []string{})
@@ -86,6 +88,7 @@ var _ = Describe("Populate Command", func() {
 			It("should validate min-asset-records is non-negative", func() {
 				viper.Set("source", "/tmp/test")
 				viper.Set("prefix", "test")
+				viper.Set("image", "test-image:v1")
 				viper.Set("min-asset-records", -1)
 
 				err := populateCmd.RunE(populateCmd, []string{})

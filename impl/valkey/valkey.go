@@ -190,7 +190,7 @@ func writeFile(root, filepath, contents string) {
 	os.WriteFile(path, []byte(contents), 0664)
 }
 
-func (v *Valkey) PopulateFn(addr, source, prefix string, timeout int64, minAssetRecords int64) error {
+func (v *Valkey) PopulateFn(addr, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	currentTime := time.Now().Unix()
 
 	fileSystem := os.DirFS(source)

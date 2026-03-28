@@ -10,8 +10,6 @@ import (
 
 	impl "github.com/RedHatInsights/valpop/impl"
 	minio "github.com/minio/minio-go/v7"
-
-	"github.com/RedHatInsights/valpop/impl/s3"
 )
 
 // S3Client implements the s3.S3Client interface for testing
@@ -105,16 +103,16 @@ func (m *S3Client) ListObjects(ctx context.Context, bucketName string, opts mini
 
 // S3Service implements the s3.S3Service interface for testing
 type S3Service struct {
-	StoredItems     map[string]string      // key -> content
-	StoredManifests map[string]s3.Manifest // key -> manifest
-	Operations      []string               // Track operations called
-	Errors          map[string]error       // operation -> error to return
+	StoredItems     map[string]string            // key -> content
+	StoredManifests map[string]impl.Manifest // key -> manifest
+	Operations      []string                     // Track operations called
+	Errors          map[string]error             // operation -> error to return
 }
 
 func NewS3Service() *S3Service {
 	return &S3Service{
 		StoredItems:     make(map[string]string),
-		StoredManifests: make(map[string]s3.Manifest),
+		StoredManifests: make(map[string]impl.Manifest),
 		Operations:      []string{},
 		Errors:          make(map[string]error),
 	}
@@ -131,7 +129,7 @@ func (m *S3Service) SetItem(namespace, filepath, contentType, bucket string, tim
 	return nil
 }
 
-func (m *S3Service) SetManifest(namespace, bucket string, timestamp int64, files s3.Manifest) error {
+func (m *S3Service) SetManifest(namespace, bucket string, timestamp int64, files impl.Manifest) error {
 	m.Operations = append(m.Operations, "SetManifest")
 	if err, exists := m.Errors["SetManifest"]; exists {
 		return err
@@ -142,7 +140,7 @@ func (m *S3Service) SetManifest(namespace, bucket string, timestamp int64, files
 	return nil
 }
 
-func (m *S3Service) PopulateFn(addr, bucket, source, prefix string, timeout int64, minAssetRecords int64) error {
+func (m *S3Service) PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	m.Operations = append(m.Operations, "PopulateFn")
 	if err, exists := m.Errors["PopulateFn"]; exists {
 		return err
@@ -163,14 +161,14 @@ func (m *S3Service) CleanupCache(prefix, bucket string, timeout int64, minAssetR
 	currentTime := time.Now().Unix()
 	allManifests := []impl.ManifestInfo{}
 
-	for key, files := range m.StoredManifests {
+	for key, manifest := range m.StoredManifests {
 		if strings.HasPrefix(key, fmt.Sprintf("manifests/%s/", prefix)) {
 			timestampStr := strings.TrimPrefix(key, fmt.Sprintf("manifests/%s/", prefix))
 			if timestamp, err := strconv.ParseInt(timestampStr, 10, 64); err == nil {
 				allManifests = append(allManifests, impl.ManifestInfo{
 					Key:       key,
 					Timestamp: timestamp,
-					Files:     files,
+					Files:     manifest.Files,
 				})
 			}
 		}
@@ -217,7 +215,7 @@ func (m *S3Service) GetStoredItem(namespace, filepath string) (string, bool) {
 	return content, exists
 }
 
-func (m *S3Service) GetStoredManifest(namespace string, timestamp int64) (s3.Manifest, bool) {
+func (m *S3Service) GetStoredManifest(namespace string, timestamp int64) (impl.Manifest, bool) {
 	key := impl.MakeManifestKey(namespace, timestamp)
 	manifest, exists := m.StoredManifests[key]
 	return manifest, exists

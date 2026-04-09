@@ -22,7 +22,7 @@ type S3Service interface {
 
 	// S3-specific operations
 	SetManifest(namespace, bucket string, timestamp int64, files impl.Manifest) error
-	PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error
+	PopulateFn(addr, bucket, source, prefix, image, valpopImage string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error
 	CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error
 }
 

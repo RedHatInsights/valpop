@@ -202,9 +202,10 @@ func BuildPopulateManifest(fileSystem fs.FS, callback func(FileInfo) error) ([]s
 
 // Manifest represents the structure of a manifest
 type Manifest struct {
-	Files     []string `json:"files"`
-	Image     string   `json:"image"`
-	Timestamp int64    `json:"timestamp"`
+	Files       []string `json:"files"`
+	Image       string   `json:"image"`
+	ValpopImage string   `json:"valpopImage,omitempty"`
+	Timestamp   int64    `json:"timestamp"`
 }
 
 // ParseManifest unmarshals a manifest from JSON bytes

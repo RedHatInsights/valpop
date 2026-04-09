@@ -228,7 +228,7 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 			})
 
 			It("should handle populate function call", func() {
-				err := mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", 3600, 3, 86400)
+				err := mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", "valpop:v1", 3600, 3, 86400)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mockService.Operations).To(ContainElement("PopulateFn"))
 			})
@@ -256,7 +256,7 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 
 				// Test PopulateFn error
 				mockService.Errors["PopulateFn"] = fmt.Errorf("source directory not found")
-				err = mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", 3600, 3, 86400)
+				err = mockService.PopulateFn("addr", "bucket", "source", "prefix", "test-image:v1", "valpop:v1", 3600, 3, 86400)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("source directory not found"))
 			})

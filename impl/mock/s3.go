@@ -140,7 +140,7 @@ func (m *S3Service) SetManifest(namespace, bucket string, timestamp int64, files
 	return nil
 }
 
-func (m *S3Service) PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
+func (m *S3Service) PopulateFn(addr, bucket, source, prefix, image, valpopImage string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	m.Operations = append(m.Operations, "PopulateFn")
 	if err, exists := m.Errors["PopulateFn"]; exists {
 		return err

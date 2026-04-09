@@ -87,7 +87,7 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, manifest 
 }
 
 
-func (m *Minio) PopulateFn(addr, bucket, source, prefix, image string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
+func (m *Minio) PopulateFn(addr, bucket, source, prefix, image, valpopImage string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	currentTime := time.Now().Unix()
 
 	// Check if latest manifest has the same image to avoid duplicate uploads
@@ -111,9 +111,10 @@ func (m *Minio) PopulateFn(addr, bucket, source, prefix, image string, timeout i
 	}
 
 	manifest := impl.Manifest{
-		Files:     fileList,
-		Image:     image,
-		Timestamp: currentTime,
+		Files:       fileList,
+		Image:       image,
+		ValpopImage: valpopImage,
+		Timestamp:   currentTime,
 	}
 
 	err = m.SetManifest(prefix, bucket, currentTime, manifest)

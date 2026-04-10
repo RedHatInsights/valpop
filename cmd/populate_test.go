@@ -64,6 +64,27 @@ var _ = Describe("Populate Command", func() {
 			})
 		})
 
+		Context("valpop-image flag", func() {
+			It("should have default empty value", func() {
+				flag := populateCmd.Flags().Lookup("valpop-image")
+				Expect(flag).NotTo(BeNil())
+				Expect(flag.DefValue).To(Equal(""))
+			})
+
+			It("should accept a valpop image value", func() {
+				err := populateCmd.Flags().Set("valpop-image", "quay.io/cloudservices/valpop:abc123")
+				Expect(err).NotTo(HaveOccurred())
+
+				viper.BindPFlag("valpop-image", populateCmd.Flags().Lookup("valpop-image"))
+				Expect(viper.GetString("valpop-image")).To(Equal("quay.io/cloudservices/valpop:abc123"))
+			})
+
+			It("should have correct usage description", func() {
+				flag := populateCmd.Flags().Lookup("valpop-image")
+				Expect(flag.Usage).To(ContainSubstring("Valpop image"))
+			})
+		})
+
 		Context("required flag validation", func() {
 			It("should require source flag", func() {
 				viper.Set("prefix", "test")

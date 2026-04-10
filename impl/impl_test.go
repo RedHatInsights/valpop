@@ -831,6 +831,27 @@ var _ = Describe("Storage Backend Drop-in Replacements", func() {
 				Expect(manifest.Timestamp).To(Equal(int64(1742472000)))
 			})
 
+			It("should parse manifest with valpopImage field", func() {
+				jsonData := []byte(`{"files": ["file1.txt"], "image": "myapp:v1", "valpopImage": "valpop:abc123", "timestamp": 1742472000}`)
+
+				manifest, err := impl.ParseManifest(jsonData)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(manifest.Files).To(Equal([]string{"file1.txt"}))
+				Expect(manifest.Image).To(Equal("myapp:v1"))
+				Expect(manifest.ValpopImage).To(Equal("valpop:abc123"))
+				Expect(manifest.Timestamp).To(Equal(int64(1742472000)))
+			})
+
+			It("should handle manifest without valpopImage (backward compat)", func() {
+				jsonData := []byte(`{"files": ["file1.txt"], "image": "myapp:v1", "timestamp": 100}`)
+
+				manifest, err := impl.ParseManifest(jsonData)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(manifest.ValpopImage).To(Equal(""))
+			})
+
 			It("should handle empty manifest (old format)", func() {
 				jsonData := []byte(`[]`)
 

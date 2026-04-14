@@ -146,9 +146,71 @@ func (m *S3Service) PopulateFn(addr, bucket, source, prefix, image, valpopImage 
 		return err
 	}
 
-	// For mock service, only track the operation without actual filesystem access
-	// Real filesystem operations should be tested in integration tests
-	return nil
+	// Check if latest manifest has the same image and valpop-image to avoid duplicate uploads
+	latestManifest, err := m.getLatestManifest(prefix)
+
+	// Only skip if we have a valid previous manifest with matching image AND matching valpop-image
+	shouldSkip := err == nil &&
+		latestManifest.Image != "" &&
+		latestManifest.Image == image &&
+		valpopImage != "" &&
+		latestManifest.ValpopImage == valpopImage
+
+	if shouldSkip {
+		fmt.Printf("Skipping upload: image %s and valpop-image %s already exist in latest manifest\n", image, valpopImage)
+		return nil
+	}
+
+	// Log why we're proceeding
+	if err != nil {
+		fmt.Printf("Proceeding: no previous manifest found\n")
+	} else if latestManifest.Image == "" {
+		fmt.Printf("Proceeding: previous manifest has empty image\n")
+	} else if latestManifest.Image != image {
+		fmt.Printf("Proceeding: image changed from %s to %s\n", latestManifest.Image, image)
+	} else if valpopImage == "" {
+		fmt.Printf("Proceeding: no valpop-image provided\n")
+	} else {
+		fmt.Printf("Proceeding: valpop-image changed from %s to %s\n", latestManifest.ValpopImage, valpopImage)
+	}
+
+	// Create a new manifest for this populate operation
+	currentTime := time.Now().Unix()
+	manifest := impl.Manifest{
+		Files:       []string{"index.html"}, // Mock data
+		Image:       image,
+		ValpopImage: valpopImage,
+		Timestamp:   currentTime,
+	}
+
+	// Store the manifest
+	return m.SetManifest(prefix, bucket, currentTime, manifest)
+}
+
+func (m *S3Service) getLatestManifest(prefix string) (impl.Manifest, error) {
+	manifestPrefix := fmt.Sprintf("manifests/%s/", prefix)
+	var latestTimestamp int64
+	var latestManifest impl.Manifest
+	found := false
+
+	for key, manifest := range m.StoredManifests {
+		if strings.HasPrefix(key, manifestPrefix) {
+			timestampStr := strings.TrimPrefix(key, manifestPrefix)
+			if timestamp, err := strconv.ParseInt(timestampStr, 10, 64); err == nil {
+				if timestamp > latestTimestamp {
+					latestTimestamp = timestamp
+					latestManifest = manifest
+					found = true
+				}
+			}
+		}
+	}
+
+	if !found {
+		return impl.Manifest{}, fmt.Errorf("no manifests found")
+	}
+
+	return latestManifest, nil
 }
 
 func (m *S3Service) CleanupCache(prefix, bucket string, timeout int64, minAssetRecords int64) error {
@@ -224,4 +286,15 @@ func (m *S3Service) GetStoredManifest(namespace string, timestamp int64) (impl.M
 func (m *S3Service) DeleteItem(namespace, filepath string) {
 	key := impl.MakeDataKey(namespace, filepath)
 	delete(m.StoredItems, key)
+}
+
+func (m *S3Service) ListManifests(namespace string) []impl.Manifest {
+	manifests := []impl.Manifest{}
+	prefix := fmt.Sprintf("manifests/%s/", namespace)
+	for key, manifest := range m.StoredManifests {
+		if strings.HasPrefix(key, prefix) {
+			manifests = append(manifests, manifest)
+		}
+	}
+	return manifests
 }

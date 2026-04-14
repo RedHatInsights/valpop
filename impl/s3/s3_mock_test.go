@@ -235,6 +235,139 @@ var _ = Describe("S3 Implementation with Mocks", func() {
 		})
 	})
 
+	Describe("Valpop image deduplication", func() {
+		Context("when comparing valpop-image with previous manifest", func() {
+			It("should skip upload when both image and valpop-image match", func() {
+				// Store an existing manifest
+				existingManifest := impl.Manifest{
+					Files:       []string{"index.html"},
+					Image:       "test-image:v1",
+					ValpopImage: "quay.io/cloudservices/valpop:abc123",
+					Timestamp:   1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with same image and valpop-image (should skip)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "quay.io/cloudservices/valpop:abc123", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have been skipped - check that only one manifest exists
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(1))
+			})
+
+			It("should proceed when valpop-image is different", func() {
+				// Store an existing manifest
+				existingManifest := impl.Manifest{
+					Files:       []string{"index.html"},
+					Image:       "test-image:v1",
+					ValpopImage: "quay.io/cloudservices/valpop:abc123",
+					Timestamp:   1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with same image but different valpop-image (should proceed)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "quay.io/cloudservices/valpop:xyz789", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that two manifests exist
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(2))
+			})
+
+			It("should proceed when valpop-image is empty", func() {
+				// Store an existing manifest
+				existingManifest := impl.Manifest{
+					Files:       []string{"index.html"},
+					Image:       "test-image:v1",
+					ValpopImage: "quay.io/cloudservices/valpop:abc123",
+					Timestamp:   1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with same image but no valpop-image (should proceed)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that two manifests exist
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(2))
+			})
+
+			It("should proceed when image is different regardless of valpop-image", func() {
+				// Store an existing manifest
+				existingManifest := impl.Manifest{
+					Files:       []string{"index.html"},
+					Image:       "test-image:v1",
+					ValpopImage: "quay.io/cloudservices/valpop:abc123",
+					Timestamp:   1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with different image but same valpop-image (should proceed)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v2", "quay.io/cloudservices/valpop:abc123", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that two manifests exist
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(2))
+			})
+
+			It("should proceed when no previous manifest exists", func() {
+				// Try to populate when no manifest exists (should proceed)
+				err := mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "quay.io/cloudservices/valpop:abc123", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that one manifest exists
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(1))
+			})
+
+			It("should proceed when previous manifest has no valpop-image but current one does", func() {
+				// Store an existing manifest without valpop-image
+				existingManifest := impl.Manifest{
+					Files:     []string{"index.html"},
+					Image:     "test-image:v1",
+					Timestamp: 1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with same image but now with valpop-image (should proceed)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "quay.io/cloudservices/valpop:abc123", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that two manifests exist
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(2))
+			})
+
+			It("should proceed when previous manifest has empty image field", func() {
+				// Store an existing manifest with empty image
+				existingManifest := impl.Manifest{
+					Files:       []string{"index.html"},
+					Image:       "",
+					ValpopImage: "quay.io/cloudservices/valpop:abc123",
+					Timestamp:   1000,
+				}
+				err := mockService.SetManifest(testNamespace, testBucket, 1000, existingManifest)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Try to populate with valid image (should proceed because previous image is empty)
+				err = mockService.PopulateFn("addr", testBucket, "source", testNamespace, "test-image:v1", "quay.io/cloudservices/valpop:abc123", 3600, 3, 86400)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Should have proceeded - check that two manifests exist
+				manifests := mockService.ListManifests(testNamespace)
+				Expect(len(manifests)).To(Equal(2))
+			})
+		})
+	})
+
 	Describe("Error handling", func() {
 		Context("Storage errors", func() {
 			It("should propagate storage errors correctly", func() {

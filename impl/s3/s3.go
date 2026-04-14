@@ -90,11 +90,32 @@ func (m *Minio) SetManifest(namespace, bucket string, timestamp int64, manifest 
 func (m *Minio) PopulateFn(addr, bucket, source, prefix, image, valpopImage string, timeout int64, minAssetRecords int64, cacheMaxAge int64) error {
 	currentTime := time.Now().Unix()
 
-	// Check if latest manifest has the same image to avoid duplicate uploads
+	// Check if latest manifest has the same image and valpop-image to avoid duplicate uploads
 	latestManifest, err := m.getLatestManifest(prefix, bucket)
-	if err == nil && latestManifest.Image != "" && latestManifest.Image == image {
-		fmt.Printf("Skipping upload: image %s already exists in latest manifest\n", image)
+
+	// Only skip if we have a valid previous manifest with matching image AND matching valpop-image
+	shouldSkip := err == nil &&
+		latestManifest.Image != "" &&
+		latestManifest.Image == image &&
+		valpopImage != "" &&
+		latestManifest.ValpopImage == valpopImage
+
+	if shouldSkip {
+		fmt.Printf("Skipping upload: image %s and valpop-image %s already exist in latest manifest\n", image, valpopImage)
 		return nil
+	}
+
+	// Log why we're proceeding
+	if err != nil {
+		fmt.Printf("Proceeding: no previous manifest found\n")
+	} else if latestManifest.Image == "" {
+		fmt.Printf("Proceeding: previous manifest has empty image\n")
+	} else if latestManifest.Image != image {
+		fmt.Printf("Proceeding: image changed from %s to %s\n", latestManifest.Image, image)
+	} else if valpopImage == "" {
+		fmt.Printf("Proceeding: no valpop-image provided\n")
+	} else {
+		fmt.Printf("Proceeding: valpop-image changed from %s to %s\n", latestManifest.ValpopImage, valpopImage)
 	}
 
 	fileSystem := os.DirFS(source)

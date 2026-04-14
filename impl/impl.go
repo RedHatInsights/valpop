@@ -71,7 +71,7 @@ type ManifestInfo struct {
 }
 
 // DetermineManifestsToDelete returns manifests that should be deleted based on retention policy
-// This is the core cleanup logic that determines which manifests are old enough to delete
+// Only keeps the N most recent manifests based on minAssetRecords
 func DetermineManifestsToDelete(allManifests []ManifestInfo, currentTime, timeout, minAssetRecords int64) []ManifestInfo {
 	// Sort manifests by timestamp (newest first)
 	sorted := make([]ManifestInfo, len(allManifests))
@@ -82,8 +82,9 @@ func DetermineManifestsToDelete(allManifests []ManifestInfo, currentTime, timeou
 
 	toDelete := []ManifestInfo{}
 	for i, manifest := range sorted {
-		// Keep at least minAssetRecords manifests regardless of timeout
-		if int64(i) >= minAssetRecords && currentTime-manifest.Timestamp > timeout {
+		// Keep only the N most recent manifests (minAssetRecords)
+		// timeout parameter is ignored - only minAssetRecords matters
+		if int64(i) >= minAssetRecords {
 			toDelete = append(toDelete, manifest)
 		}
 	}
@@ -131,6 +132,7 @@ func DetermineFilesToDelete(oldManifests, keptManifests []ManifestInfo, protecte
 }
 
 // SeparateManifests separates manifests into those to delete and those to keep
+// Only keeps the N most recent manifests based on minAssetRecords
 func SeparateManifests(allManifests []ManifestInfo, currentTime, timeout, minAssetRecords int64) (toDelete, toKeep []ManifestInfo) {
 	// Sort manifests by timestamp (newest first)
 	sorted := make([]ManifestInfo, len(allManifests))
@@ -143,8 +145,9 @@ func SeparateManifests(allManifests []ManifestInfo, currentTime, timeout, minAss
 	toKeep = []ManifestInfo{}
 
 	for i, manifest := range sorted {
-		// Keep at least minAssetRecords manifests regardless of timeout
-		if int64(i) >= minAssetRecords && currentTime-manifest.Timestamp > timeout {
+		// Keep only the N most recent manifests (minAssetRecords)
+		// timeout parameter is ignored - only minAssetRecords matters
+		if int64(i) >= minAssetRecords {
 			toDelete = append(toDelete, manifest)
 		} else {
 			toKeep = append(toKeep, manifest)

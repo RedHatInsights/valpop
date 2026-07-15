@@ -14,6 +14,9 @@ var popCmd = &cobra.Command{
 	Use:   "pop",
 	Short: "copies to the dest for serving",
 	Long:  "copies cache to dest for serving",
+	FParseErrWhitelist: cobra.FParseErrWhitelist{
+		UnknownFlags: true,
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if viper.GetString("dest") == "" {
 			return fmt.Errorf("dest arg not set")

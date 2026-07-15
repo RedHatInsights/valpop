@@ -14,6 +14,19 @@ func TestPopulateCmd(t *testing.T) {
 }
 
 var _ = Describe("Populate Command", func() {
+	Describe("unknown flags", func() {
+		It("should ignore unrecognized flags without erroring", func() {
+			cmd := rootCmd
+			cmd.SetArgs([]string{"populate", "--source", "/tmp", "--prefix", "test", "--unknown-flag", "value"})
+			// Should not return an error about the unknown flag
+			// (will fail for other reasons like missing S3 creds, but NOT for unknown flags)
+			err := cmd.Execute()
+			if err != nil {
+				Expect(err.Error()).NotTo(ContainSubstring("unknown flag"))
+			}
+		})
+	})
+
 	Describe("CLI flags", func() {
 		BeforeEach(func() {
 			// Reset viper before each test

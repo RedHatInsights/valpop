@@ -14,6 +14,9 @@ var rootCmd = &cobra.Command{
 	Use:   "valpop",
 	Short: "pops or populates storage for Frontends",
 	Long:  "pops or populates storage for Frontends - ya know",
+	FParseErrWhitelist: cobra.FParseErrWhitelist{
+		UnknownFlags: true,
+	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		addr = fmt.Sprintf("%s:%s", viper.GetString("hostname"), viper.GetString("port"))
 		bucket = viper.GetString("bucket")

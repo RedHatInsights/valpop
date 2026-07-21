@@ -14,6 +14,9 @@ var populateCmd = &cobra.Command{
 	Use:   "populate",
 	Short: "populates the cache",
 	Long:  "populates the cache from the source",
+	FParseErrWhitelist: cobra.FParseErrWhitelist{
+		UnknownFlags: true,
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if viper.GetString("source") == "" {
 			return fmt.Errorf("no source arg set")

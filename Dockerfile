@@ -1,21 +1,23 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:latest AS builder
-USER root
+FROM registry.access.redhat.com/hi/go:latest-fips-builder AS builder
+USER 0
 
-WORKDIR /opt/app-root/src/valpop
+WORKDIR /workspace
 
-# only copy the necessary files
-COPY go.mod go.sum main.go .
+# Cache dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY main.go .
 COPY cmd/ cmd/
 COPY impl/ impl/
 
-# statically building so it doesn't depend on GLIBC
-RUN CGO_ENABLED=0 go build -o valpop -ldflags="-s -w"
+# Build with CGO enabled for FIPS-compliant crypto (BoringSSL)
+RUN CGO_ENABLED=1 go build -o valpop -ldflags="-s -w"
 
-FROM registry.access.redhat.com/ubi9-minimal:latest
+FROM registry.access.redhat.com/hi/go:latest-fips
 
-RUN microdnf update -y
-
-COPY --from=builder /opt/app-root/src/valpop/valpop /usr/local/bin/valpop
+COPY --from=builder /workspace/valpop /usr/local/bin/valpop
 USER 1001
 
-ENTRYPOINT ["/usr/local/bin/valpop"]
+CMD ["/usr/local/bin/valpop"]

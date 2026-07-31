@@ -42,12 +42,14 @@ func init() {
 	rootCmd.PersistentFlags().StringP("username", "u", "", "Username for S3")
 	rootCmd.PersistentFlags().StringP("password", "c", "", "Password for S3")
 	rootCmd.PersistentFlags().StringP("bucket", "b", "frontend", "S3 bucket name")
+	rootCmd.PersistentFlags().Bool("secure", true, "Use TLS for S3 connections (set to false for plaintext HTTP)")
 	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("mode", rootCmd.PersistentFlags().Lookup("mode"))
 	viper.BindPFlag("username", rootCmd.PersistentFlags().Lookup("username"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
 	viper.BindPFlag("bucket", rootCmd.PersistentFlags().Lookup("bucket"))
+	viper.BindPFlag("secure", rootCmd.PersistentFlags().Lookup("secure"))
 }
 
 func Execute() error {

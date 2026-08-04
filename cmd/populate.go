@@ -49,7 +49,7 @@ var populateCmd = &cobra.Command{
 				viper.GetInt64("cache-max-age"),
 			)
 		} else if viper.GetString("mode") == "s3" {
-			client, err := s3.NewMinio(addr, viper.GetString("username"), viper.GetString("password"))
+			client, err := s3.NewMinio(addr, viper.GetString("username"), viper.GetString("password"), viper.GetBool("secure"))
 			if err != nil {
 				return err
 			}

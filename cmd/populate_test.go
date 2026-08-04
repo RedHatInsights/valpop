@@ -98,6 +98,32 @@ var _ = Describe("Populate Command", func() {
 			})
 		})
 
+		Context("secure flag", func() {
+			It("should default to true (TLS enabled)", func() {
+				flag := rootCmd.PersistentFlags().Lookup("secure")
+				Expect(flag).NotTo(BeNil())
+				Expect(flag.DefValue).To(Equal("true"))
+			})
+
+			It("should be configurable via flag", func() {
+				err := rootCmd.PersistentFlags().Set("secure", "false")
+				Expect(err).NotTo(HaveOccurred())
+
+				viper.BindPFlag("secure", rootCmd.PersistentFlags().Lookup("secure"))
+				Expect(viper.GetBool("secure")).To(BeFalse())
+
+				// Reset to default
+				err = rootCmd.PersistentFlags().Set("secure", "true")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have correct usage description", func() {
+				flag := rootCmd.PersistentFlags().Lookup("secure")
+				Expect(flag.Usage).To(ContainSubstring("TLS"))
+				Expect(flag.Usage).To(ContainSubstring("S3"))
+			})
+		})
+
 		Context("required flag validation", func() {
 			It("should require source flag", func() {
 				viper.Set("prefix", "test")

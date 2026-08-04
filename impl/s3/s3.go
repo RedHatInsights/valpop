@@ -21,11 +21,12 @@ type Minio struct {
 	client S3Client
 }
 
-// NewMinio creates a new Minio instance with a real MinIO client
-func NewMinio(addr, username, password string) (Minio, error) {
+// NewMinio creates a new Minio instance with a real MinIO client.
+// When secure is true, the client uses TLS (HTTPS) for all S3 connections.
+func NewMinio(addr, username, password string, secure bool) (Minio, error) {
 	client, err := minio.New(addr, &minio.Options{
 		Creds:  creds.NewStaticV4(username, password, ""),
-		Secure: false, // Change to `true` if using HTTPS
+		Secure: secure,
 	})
 	if err != nil {
 		return Minio{}, fmt.Errorf("failed to create S3 client: %w", err)
